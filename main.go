@@ -76,14 +76,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Motronic M2.1 map locations
-	// Note: These are typical M2.1 locations but may vary by vehicle
+	// Motronic M2.1 map locations (verified from file scan)
 	configs := []MapConfig{
 		{
 			Name:     "Main Fuel Map",
 			Offset:   0x6700,
 			Rows:     8,
-			Cols:     8,
+			Cols:     16,
 			DataType: "uint8",
 			Scale:    0.04,
 			Offset2:  0,
@@ -93,7 +92,7 @@ func main() {
 			Name:     "Ignition Timing Map",
 			Offset:   0x6780,
 			Rows:     8,
-			Cols:     8,
+			Cols:     16,
 			DataType: "uint8",
 			Scale:    0.75,
 			Offset2:  -24.0,
@@ -103,34 +102,24 @@ func main() {
 			Name:     "Idle Fuel Map",
 			Offset:   0x6800,
 			Rows:     8,
-			Cols:     8,
+			Cols:     16,
 			DataType: "uint8",
 			Scale:    0.04,
 			Offset2:  0,
 			Unit:     "ms",
 		},
 		{
-			Name:     "Cold Start Enrichment",
+			Name:     "Warmup/Enrichment Table",
 			Offset:   0x6880,
 			Rows:     8,
-			Cols:     4,
-			DataType: "uint8",
-			Scale:    1.0,
-			Offset2:  0,
-			Unit:     "%",
-		},
-		{
-			Name:     "Warmup Enrichment",
-			Offset:   0x68C0,
-			Rows:     8,
-			Cols:     4,
+			Cols:     8,
 			DataType: "uint8",
 			Scale:    0.5,
 			Offset2:  0,
 			Unit:     "%",
 		},
 		{
-			Name:     "Air/Fuel Ratio Map",
+			Name:     "Lambda/AFR Map",
 			Offset:   0x6D00,
 			Rows:     8,
 			Cols:     8,

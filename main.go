@@ -51,6 +51,12 @@ func main() {
 		return
 	}
 
+	// Validate display mode
+	if *displayMode != "symbols" && *displayMode != "values" {
+		fmt.Println("Error: -display must be either 'symbols' or 'values'")
+		os.Exit(1)
+	}
+
 	// Motronic map locations (identified from bin file scan)
 	configs := []MapConfig{
 		{

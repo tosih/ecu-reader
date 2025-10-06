@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/pterm/pterm"
 )
 
 // MapConfig defines the structure of a map in the ECU file
@@ -36,13 +38,14 @@ func main() {
 	flag.Parse()
 
 	if *filename == "" {
-		fmt.Println("Usage: ecu-reader -file <filename> [-map fuel|spark|all] [-display symbols|values] [-v] [-scan]")
-		fmt.Println("\nOptions:")
-		fmt.Println("  -file     Path to ECU binary file")
-		fmt.Println("  -map      Map type to display: fuel, spark, or all (default: all)")
-		fmt.Println("  -display  Display mode: symbols or values (default: symbols)")
-		fmt.Println("  -v        Verbose mode - show raw hex values")
-		fmt.Println("  -scan     Scan file to find potential map locations")
+		pterm.DefaultBox.WithTitle("ECU Map Reader").WithTitleTopCenter().Println(
+			"Usage: ecu-reader -file <filename> [options]\n\n" +
+				"Options:\n" +
+				"  -file     Path to ECU binary file\n" +
+				"  -map      Map type: fuel, spark, or all (default: all)\n" +
+				"  -display  Display mode: symbols or values (default: symbols)\n" +
+				"  -v        Verbose mode - show raw hex values\n" +
+				"  -scan     Scan file to find potential map locations")
 		os.Exit(1)
 	}
 
@@ -50,10 +53,10 @@ func main() {
 		scanForMaps(*filename)
 		return
 	}
-	
+
 	// Validate display mode
 	if *displayMode != "symbols" && *displayMode != "values" {
-		fmt.Println("Error: -display must be either 'symbols' or 'values'")
+		pterm.Error.Println("Display mode must be either 'symbols' or 'values'")
 		os.Exit(1)
 	}
 
@@ -65,7 +68,7 @@ func main() {
 			Rows:     8,
 			Cols:     16,
 			DataType: "uint8",
-			Scale:    0.04, // Typical injection time scaling
+			Scale:    0.04,
 			Offset2:  0,
 			Unit:     "ms",
 		},
@@ -171,14 +174,21 @@ func main() {
 		}
 	}
 
+	pterm.DefaultHeader.WithFullWidth().
+		WithBackgroundStyle(pterm.NewStyle(pterm.BgDarkGray)).
+		WithTextStyle(pterm.NewStyle(pterm.FgLightWhite)).
+		Println("ECU Map Reader - Motronic")
+
+	pterm.Println()
+
 	// Read and display maps
 	for i, cfg := range selectedConfigs {
 		if i > 0 {
-			fmt.Println()
+			pterm.Println()
 		}
 		ecuMap, err := readMap(*filename, cfg)
 		if err != nil {
-			fmt.Printf("Error reading %s: %v\n", cfg.Name, err)
+			pterm.Error.Printf("Error reading %s: %v\n", cfg.Name, err)
 			continue
 		}
 		renderMap(ecuMap, *verbose, *displayMode)
@@ -186,45 +196,55 @@ func main() {
 }
 
 func scanForMaps(filename string) {
+	spinner, _ := pterm.DefaultSpinner.Start("Scanning file for map locations...")
+
 	f, err := os.Open(filename)
 	if err != nil {
-		fmt.Printf("Error opening file: %v\n", err)
+		spinner.Fail("Error opening file")
+		pterm.Error.Printf("Error: %v\n", err)
 		return
 	}
 	defer f.Close()
 
 	data, err := io.ReadAll(f)
 	if err != nil {
-		fmt.Printf("Error reading file: %v\n", err)
+		spinner.Fail("Error reading file")
+		pterm.Error.Printf("Error: %v\n", err)
 		return
 	}
 
-	fmt.Printf("File size: %d bytes (0x%X)\n\n", len(data), len(data))
-	fmt.Println("Scanning for potential 8x8 map locations...")
-	fmt.Println("Looking for areas with good variance (not all same values)\n")
+	spinner.Success(fmt.Sprintf("File loaded: %d bytes (0x%X)", len(data), len(data)))
 
-	// Scan for potential 8x8 maps
+	pterm.Println()
+	pterm.DefaultSection.Println("Potential 8x8 Map Locations")
+
+	var results [][]string
+	results = append(results, []string{"Offset", "Preview", "Min", "Max", "Avg"})
+
 	for offset := 0; offset < len(data)-64; offset += 0x40 {
 		if hasGoodVariance(data[offset : offset+64]) {
-			fmt.Printf("Offset 0x%04X: ", offset)
-			
-			// Show first row as preview
+			preview := ""
 			for i := 0; i < 8; i++ {
-				fmt.Printf("%02X ", data[offset+i])
+				preview += fmt.Sprintf("%02X ", data[offset+i])
 			}
-			fmt.Printf("...")
-			
-			// Calculate some stats
+			preview += "..."
+
 			min, max, avg := getStats(data[offset : offset+64])
-			fmt.Printf(" [Min:%d Max:%d Avg:%.0f]\n", min, max, avg)
+			results = append(results, []string{
+				fmt.Sprintf("0x%04X", offset),
+				preview,
+				fmt.Sprintf("%d", min),
+				fmt.Sprintf("%d", max),
+				fmt.Sprintf("%.0f", avg),
+			})
 		}
 	}
-	
-	fmt.Println("\n" + strings.Repeat("=", 70))
-	fmt.Println("Hex dump of interesting regions:")
-	fmt.Println(strings.Repeat("=", 70))
-	
-	// Show some specific regions known to contain maps in Motronic
+
+	pterm.DefaultTable.WithHasHeader().WithData(results).Render()
+
+	pterm.Println()
+	pterm.DefaultSection.Println("Hex Dumps of Key Regions")
+
 	regions := []struct {
 		start int
 		name  string
@@ -235,11 +255,11 @@ func scanForMaps(filename string) {
 		{0x7900, "Region 4 (0x7900)"},
 		{0x7A00, "Region 5 (0x7A00)"},
 	}
-	
+
 	for _, region := range regions {
 		if region.start+128 <= len(data) {
-			fmt.Printf("\n%s:\n", region.name)
-			printHexDump(data, region.start, 128)
+			pterm.Println()
+			pterm.DefaultBox.WithTitle(region.name).Println(getHexDump(data, region.start, 128))
 		}
 	}
 }
@@ -248,10 +268,10 @@ func hasGoodVariance(data []byte) bool {
 	if len(data) < 2 {
 		return false
 	}
-	
+
 	min := data[0]
 	max := data[0]
-	
+
 	for _, b := range data {
 		if b < min {
 			min = b
@@ -260,8 +280,7 @@ func hasGoodVariance(data []byte) bool {
 			max = b
 		}
 	}
-	
-	// Good variance if range is at least 10 and not all zeros
+
 	return (max-min) >= 10 && max > 0
 }
 
@@ -269,11 +288,11 @@ func getStats(data []byte) (uint8, uint8, float64) {
 	if len(data) == 0 {
 		return 0, 0, 0
 	}
-	
+
 	min := data[0]
 	max := data[0]
 	sum := 0
-	
+
 	for _, b := range data {
 		if b < min {
 			min = b
@@ -283,36 +302,37 @@ func getStats(data []byte) (uint8, uint8, float64) {
 		}
 		sum += int(b)
 	}
-	
+
 	avg := float64(sum) / float64(len(data))
 	return min, max, avg
 }
 
-func printHexDump(data []byte, offset, length int) {
+func getHexDump(data []byte, offset, length int) string {
+	var result strings.Builder
 	end := offset + length
 	if end > len(data) {
 		end = len(data)
 	}
-	
+
 	for i := offset; i < end; i += 16 {
-		fmt.Printf("  0x%04X: ", i)
-		
-		// Hex values
+		result.WriteString(fmt.Sprintf("0x%04X: ", i))
+
 		for j := 0; j < 16 && i+j < end; j++ {
-			fmt.Printf("%02X ", data[i+j])
+			result.WriteString(fmt.Sprintf("%02X ", data[i+j]))
 		}
-		
-		// ASCII representation
-		fmt.Print(" | ")
+
+		result.WriteString(" | ")
 		for j := 0; j < 16 && i+j < end; j++ {
 			if data[i+j] >= 32 && data[i+j] <= 126 {
-				fmt.Printf("%c", data[i+j])
+				result.WriteString(fmt.Sprintf("%c", data[i+j]))
 			} else {
-				fmt.Print(".")
+				result.WriteString(".")
 			}
 		}
-		fmt.Println()
+		result.WriteString("\n")
 	}
+
+	return result.String()
 }
 
 func readMap(filename string, cfg MapConfig) (*ECUMap, error) {
@@ -332,7 +352,7 @@ func readMap(filename string, cfg MapConfig) (*ECUMap, error) {
 		data[i] = make([]float64, cfg.Cols)
 		for j := 0; j < cfg.Cols; j++ {
 			var value float64
-			
+
 			if cfg.DataType == "uint8" {
 				var rawValue uint8
 				err := binary.Read(f, binary.LittleEndian, &rawValue)
@@ -348,7 +368,7 @@ func readMap(filename string, cfg MapConfig) (*ECUMap, error) {
 				}
 				value = float64(rawValue)*cfg.Scale + cfg.Offset2
 			}
-			
+
 			data[i][j] = value
 		}
 	}
@@ -360,55 +380,83 @@ func readMap(filename string, cfg MapConfig) (*ECUMap, error) {
 }
 
 func renderMap(m *ECUMap, verbose bool, displayMode string) {
-	width := m.Config.Cols*3 + 10
-	if width < 40 {
-		width = 40
-	}
-	
-	fmt.Printf("╔" + strings.Repeat("═", width) + "╗\n")
-	fmt.Printf("║ %-"+fmt.Sprintf("%d", width-2)+"s ║\n", m.Config.Name)
-	fmt.Printf("║ Offset: 0x%04X | Size: %dx%d | Type: %s %-"+fmt.Sprintf("%d", width-45)+"s ║\n", 
-		m.Config.Offset, m.Config.Rows, m.Config.Cols, m.Config.DataType, "")
-	fmt.Printf("╠" + strings.Repeat("═", width) + "╣\n")
-
 	min, max := findMinMax(m.Data)
 
-	if m.Config.Cols > 1 {
-		fmt.Print("║ Load/RPM │")
-		for j := 0; j < m.Config.Cols; j++ {
-			fmt.Printf("%3d", j)
+	// Create title with info
+	title := fmt.Sprintf("%s | Offset: 0x%04X | %dx%d | Range: %.1f-%.1f %s",
+		m.Config.Name, m.Config.Offset, m.Config.Rows, m.Config.Cols, min, max, m.Config.Unit)
+
+	pterm.DefaultBox.WithTitle(title).WithTitleTopLeft().Println(buildMapString(m, displayMode, min, max))
+
+	if verbose {
+		pterm.Println()
+		pterm.Info.Println("Raw hex values:")
+		f, err := os.Open("")
+		if err == nil {
+			f.Seek(m.Config.Offset, io.SeekStart)
+			for i := 0; i < m.Config.Rows; i++ {
+				fmt.Printf("Row %d: ", i)
+				for j := 0; j < m.Config.Cols; j++ {
+					var b uint8
+					binary.Read(f, binary.LittleEndian, &b)
+					fmt.Printf("0x%02X ", b)
+				}
+				fmt.Println()
+			}
+			f.Close()
 		}
-		fmt.Println(" ║")
-		fmt.Printf("╠══════════╪" + strings.Repeat("═", m.Config.Cols*3) + "═╣\n")
+	}
+}
+
+func buildMapString(m *ECUMap, displayMode string, min, max float64) string {
+	var result strings.Builder
+
+	// Column headers
+	if displayMode == "values" {
+		result.WriteString("Load/RPM |")
+		for j := 0; j < m.Config.Cols; j++ {
+			result.WriteString(fmt.Sprintf("%5d", j))
+		}
 	} else {
-		fmt.Print("║   RPM    │Val║\n")
-		fmt.Printf("╠══════════╪═══╣\n")
+		result.WriteString("Load/RPM |")
+		for j := 0; j < m.Config.Cols; j++ {
+			result.WriteString(fmt.Sprintf("%d", j%10))
+		}
+	}
+	result.WriteString("\n")
+
+	if displayMode == "values" {
+		result.WriteString(strings.Repeat("-", 10) + "|" + strings.Repeat("-", m.Config.Cols*5) + "\n")
+	} else {
+		result.WriteString(strings.Repeat("-", 10) + "|" + strings.Repeat("-", m.Config.Cols) + "\n")
 	}
 
+	// Data rows
 	for i := 0; i < m.Config.Rows; i++ {
-		fmt.Printf("║   %4d   │", i)
+		result.WriteString(fmt.Sprintf("  %4d   |", i))
 		for j := 0; j < m.Config.Cols; j++ {
 			value := m.Data[i][j]
-			symbol := getSymbolForValue(value, min, max)
-			fmt.Printf(" %s ", symbol)
+			if displayMode == "values" {
+				color := getColorStyle(value, min, max)
+				result.WriteString(color.Sprintf("%5.1f", value))
+			} else {
+				symbol := getSymbolForValue(value, min, max)
+				result.WriteString(symbol)
+			}
 		}
-		fmt.Println(" ║")
+		result.WriteString("\n")
 	}
 
-	fmt.Printf("╚══════════╧" + strings.Repeat("═", m.Config.Cols*3) + "═╝\n")
-	fmt.Printf("Range: %.2f - %.2f %s\n", min, max, m.Config.Unit)
-	fmt.Printf("Legend: \033[34m░\033[0m Low  \033[32m▒\033[0m Med  \033[33m▓\033[0m High  \033[31m█\033[0m Max\n")
-	
-	if verbose {
-		fmt.Println("\nRaw Values:")
-		for i := 0; i < m.Config.Rows; i++ {
-			fmt.Printf("Row %d: ", i)
-			for j := 0; j < m.Config.Cols; j++ {
-				fmt.Printf("%.2f ", m.Data[i][j])
-			}
-			fmt.Println()
-		}
+	// Legend
+	if displayMode == "symbols" {
+		result.WriteString("\nLegend: ")
+		result.WriteString(pterm.FgCyan.Sprint("░") + " Low  ")
+		result.WriteString(pterm.FgGreen.Sprint("▒") + " Med  ")
+		result.WriteString(pterm.FgYellow.Sprint("▓") + " High  ")
+		result.WriteString(pterm.FgRed.Sprint("█") + " Max")
 	}
+
+	return result.String()
 }
 
 func findMinMax(data [][]float64) (float64, float64) {
@@ -431,38 +479,38 @@ func findMinMax(data [][]float64) (float64, float64) {
 
 func getSymbolForValue(value, min, max float64) string {
 	if max == min {
-		return "\033[37m·\033[0m" // Gray dot if all values are the same
+		return pterm.FgGray.Sprint("·")
 	}
-	
+
 	normalized := (value - min) / (max - min)
 
 	switch {
 	case normalized < 0.25:
-		return "\033[96m░\033[0m" // Cyan/light blue
+		return pterm.FgCyan.Sprint("░")
 	case normalized < 0.5:
-		return "\033[32m▒\033[0m" // Green
+		return pterm.FgGreen.Sprint("▒")
 	case normalized < 0.75:
-		return "\033[33m▓\033[0m" // Yellow
+		return pterm.FgYellow.Sprint("▓")
 	default:
-		return "\033[31m█\033[0m" // Red
+		return pterm.FgRed.Sprint("█")
 	}
 }
 
-func getColorCode(value, min, max float64) string {
+func getColorStyle(value, min, max float64) *pterm.Style {
 	if max == min {
-		return "\033[37m" // Gray if all values are the same
+		return pterm.NewStyle(pterm.FgGray)
 	}
-	
+
 	normalized := (value - min) / (max - min)
 
 	switch {
 	case normalized < 0.25:
-		return "\033[96m" // Cyan/light blue
+		return pterm.NewStyle(pterm.FgCyan)
 	case normalized < 0.5:
-		return "\033[32m" // Green
+		return pterm.NewStyle(pterm.FgGreen)
 	case normalized < 0.75:
-		return "\033[33m" // Yellow
+		return pterm.NewStyle(pterm.FgYellow)
 	default:
-		return "\033[31m" // Red
+		return pterm.NewStyle(pterm.FgRed)
 	}
 }

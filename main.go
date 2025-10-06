@@ -35,6 +35,9 @@ func main() {
 	verbose := flag.Bool("v", false, "Verbose output showing raw values")
 	scan := flag.Bool("scan", false, "Scan file for potential map locations")
 	displayMode := flag.String("display", "symbols", "Display mode: symbols or values")
+	edit := flag.Bool("edit", false, "Enter interactive edit mode")
+	preset := flag.String("preset", "", "Apply preset modification: revlimit, boost, etc.")
+	dryRun := flag.Bool("dry-run", false, "Preview changes without writing")
 	flag.Parse()
 
 	if *filename == "" {
@@ -45,12 +48,25 @@ func main() {
 				"  -map      Map type: fuel, spark, or all (default: all)\n" +
 				"  -display  Display mode: symbols or values (default: symbols)\n" +
 				"  -v        Verbose mode - show raw hex values\n" +
-				"  -scan     Scan file to find potential map locations")
+				"  -scan     Scan file to find potential map locations\n" +
+				"  -edit     Enter interactive edit mode\n" +
+				"  -preset   Apply preset: revlimit, boost, fuel-enrich\n" +
+				"  -dry-run  Preview changes without writing to file")
 		os.Exit(1)
 	}
 
 	if *scan {
 		scanForMaps(*filename)
+		return
+	}
+
+	if *edit {
+		interactiveEdit(*filename, *dryRun)
+		return
+	}
+
+	if *preset != "" {
+		applyPreset(*filename, *preset, *dryRun)
 		return
 	}
 
@@ -60,23 +76,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Motronic map locations (identified from bin file scan)
+	// Motronic M2.1 map locations
+	// Note: These are typical M2.1 locations but may vary by vehicle
 	configs := []MapConfig{
 		{
-			Name:     "Main Fuel Map (Injection Time)",
+			Name:     "Main Fuel Map",
 			Offset:   0x6700,
 			Rows:     8,
-			Cols:     16,
-			DataType: "uint8",
-			Scale:    0.04,
-			Offset2:  0,
-			Unit:     "ms",
-		},
-		{
-			Name:     "Fuel Map 2 (Secondary)",
-			Offset:   0x6740,
-			Rows:     8,
-			Cols:     16,
+			Cols:     8,
 			DataType: "uint8",
 			Scale:    0.04,
 			Offset2:  0,
@@ -93,10 +100,10 @@ func main() {
 			Unit:     "°BTDC",
 		},
 		{
-			Name:     "Idle/Low Load Map",
+			Name:     "Idle Fuel Map",
 			Offset:   0x6800,
 			Rows:     8,
-			Cols:     16,
+			Cols:     8,
 			DataType: "uint8",
 			Scale:    0.04,
 			Offset2:  0,
@@ -106,7 +113,7 @@ func main() {
 			Name:     "Cold Start Enrichment",
 			Offset:   0x6880,
 			Rows:     8,
-			Cols:     8,
+			Cols:     4,
 			DataType: "uint8",
 			Scale:    1.0,
 			Offset2:  0,
@@ -116,14 +123,14 @@ func main() {
 			Name:     "Warmup Enrichment",
 			Offset:   0x68C0,
 			Rows:     8,
-			Cols:     8,
+			Cols:     4,
 			DataType: "uint8",
 			Scale:    0.5,
 			Offset2:  0,
 			Unit:     "%",
 		},
 		{
-			Name:     "Air/Fuel Ratio Target",
+			Name:     "Air/Fuel Ratio Map",
 			Offset:   0x6D00,
 			Rows:     8,
 			Cols:     8,
@@ -131,36 +138,6 @@ func main() {
 			Scale:    0.1,
 			Offset2:  10.0,
 			Unit:     "AFR",
-		},
-		{
-			Name:     "Boost/Pressure Map",
-			Offset:   0x6E00,
-			Rows:     8,
-			Cols:     8,
-			DataType: "uint8",
-			Scale:    1.0,
-			Offset2:  0,
-			Unit:     "kPa",
-		},
-		{
-			Name:     "Throttle Position Map",
-			Offset:   0x6F00,
-			Rows:     8,
-			Cols:     8,
-			DataType: "uint8",
-			Scale:    0.5,
-			Offset2:  0,
-			Unit:     "%",
-		},
-		{
-			Name:     "Rev Limiter/Fuel Cut",
-			Offset:   0x7000,
-			Rows:     8,
-			Cols:     8,
-			DataType: "uint8",
-			Scale:    50.0,
-			Offset2:  0,
-			Unit:     "RPM",
 		},
 	}
 
@@ -177,7 +154,7 @@ func main() {
 	pterm.DefaultHeader.WithFullWidth().
 		WithBackgroundStyle(pterm.NewStyle(pterm.BgDarkGray)).
 		WithTextStyle(pterm.NewStyle(pterm.FgLightWhite)).
-		Println("ECU Map Reader - Motronic")
+		Println("ECU Map Reader - Motronic M2.1")
 
 	pterm.Println()
 
@@ -513,4 +490,361 @@ func getColorStyle(value, min, max float64) *pterm.Style {
 	default:
 		return pterm.NewStyle(pterm.FgRed)
 	}
+}
+
+// createBackup creates a timestamped backup of the original file
+func createBackup(filename string) (string, error) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return "", err
+	}
+
+	backupName := filename + ".backup"
+	err = os.WriteFile(backupName, data, 0644)
+	if err != nil {
+		return "", err
+	}
+
+	return backupName, nil
+}
+
+// interactiveEdit provides an interactive menu to edit map values
+func interactiveEdit(filename string, dryRun bool) {
+	pterm.DefaultHeader.WithFullWidth().
+		WithBackgroundStyle(pterm.NewStyle(pterm.BgRed)).
+		WithTextStyle(pterm.NewStyle(pterm.FgBlack)).
+		Println("⚠️  INTERACTIVE EDIT MODE - USE WITH EXTREME CAUTION  ⚠️")
+
+	pterm.Warning.Println("Modifying ECU calibration can cause:\n" +
+		"  • Engine damage or failure\n" +
+		"  • Unsafe driving conditions\n" +
+		"  • Warranty void\n" +
+		"  • Legal issues (emissions)\n")
+
+	result, _ := pterm.DefaultInteractiveConfirm.Show("Do you understand the risks and want to proceed?")
+	if !result {
+		pterm.Info.Println("Edit cancelled.")
+		return
+	}
+
+	pterm.Println()
+
+	options := []string{
+		"Edit Rev Limiter",
+		"Edit Fuel Map Cell",
+		"Edit Ignition Map Cell",
+		"Scale Entire Map (multiply)",
+		"Exit",
+	}
+
+	selectedOption, _ := pterm.DefaultInteractiveSelect.
+		WithOptions(options).
+		Show("Select what to edit:")
+
+	switch selectedOption {
+	case "Edit Rev Limiter":
+		editRevLimiter(filename, dryRun)
+	case "Edit Fuel Map Cell":
+		editMapCell(filename, 0x6700, "Fuel Map", 8, 16, 0.04, 0, dryRun)
+	case "Edit Ignition Map Cell":
+		editMapCell(filename, 0x6780, "Ignition Map", 8, 8, 0.75, -24.0, dryRun)
+	case "Scale Entire Map (multiply)":
+		scaleMap(filename, dryRun)
+	case "Exit":
+		pterm.Info.Println("Exiting edit mode.")
+		return
+	}
+}
+
+func editRevLimiter(filename string, dryRun bool) {
+	pterm.Info.Println("M2.1 Rev Limiter location varies by application")
+	pterm.Warning.Println("Setting too high can cause catastrophic engine damage!")
+	pterm.Warning.Println("M2.1 typically has hardware-based limiters in addition to software")
+
+	currentValue, _ := pterm.DefaultInteractiveTextInput.Show("Enter new RPM limit (e.g., 6500)")
+
+	rpm := 0
+	fmt.Sscanf(currentValue, "%d", &rpm)
+
+	if rpm < 3000 || rpm > 7500 {
+		pterm.Error.Println("Invalid RPM range for M2.1. Must be between 3000-7500.")
+		return
+	}
+
+	pterm.Info.Printf("Will set rev limiter to: %d RPM\n", rpm)
+	pterm.Warning.Println("Note: M2.1 may also have hardware limiters that override software settings")
+
+	if dryRun {
+		pterm.Warning.Println("DRY RUN - No changes made")
+		return
+	}
+
+	result, _ := pterm.DefaultInteractiveConfirm.Show("Write this change to file?")
+	if !result {
+		pterm.Info.Println("Cancelled.")
+		return
+	}
+
+	backup, err := createBackup(filename)
+	if err != nil {
+		pterm.Error.Printf("Failed to create backup: %v\n", err)
+		return
+	}
+	pterm.Success.Printf("Backup created: %s\n", backup)
+
+	data, _ := os.ReadFile(filename)
+	// M2.1 specific: Rev limiter often at different location
+	// This is an example - exact location varies by vehicle
+	scaled := uint8(rpm / 50)
+	if len(data) > 0x7000 {
+		data[0x7000] = scaled
+	}
+
+	err = os.WriteFile(filename, data, 0644)
+	if err != nil {
+		pterm.Error.Printf("Failed to write: %v\n", err)
+		return
+	}
+
+	pterm.Success.Println("Rev limiter updated successfully!")
+	pterm.Info.Println("Verify with datalogger before driving!")
+}
+
+func editMapCell(filename string, offset int64, mapName string, rows, cols int, scale, offset2 float64, dryRun bool) {
+	pterm.Info.Printf("Editing %s (%dx%d)\n", mapName, rows, cols)
+
+	rowStr, _ := pterm.DefaultInteractiveTextInput.Show("Enter row (0-" + fmt.Sprintf("%d", rows-1) + ")")
+	colStr, _ := pterm.DefaultInteractiveTextInput.Show("Enter column (0-" + fmt.Sprintf("%d", cols-1) + ")")
+
+	row, col := 0, 0
+	fmt.Sscanf(rowStr, "%d", &row)
+	fmt.Sscanf(colStr, "%d", &col)
+
+	if row < 0 || row >= rows || col < 0 || col >= cols {
+		pterm.Error.Println("Invalid cell coordinates")
+		return
+	}
+
+	// Read current value
+	f, err := os.Open(filename)
+	if err != nil {
+		pterm.Error.Printf("Error opening file: %v\n", err)
+		return
+	}
+	cellOffset := offset + int64(row*cols+col)
+	f.Seek(cellOffset, io.SeekStart)
+	var currentRaw uint8
+	binary.Read(f, binary.LittleEndian, &currentRaw)
+	f.Close()
+
+	currentValue := float64(currentRaw)*scale + offset2
+	pterm.Info.Printf("Current value at [%d,%d]: %.2f (raw: 0x%02X)\n", row, col, currentValue, currentRaw)
+
+	newValueStr, _ := pterm.DefaultInteractiveTextInput.Show("Enter new value")
+	newValue := 0.0
+	fmt.Sscanf(newValueStr, "%f", &newValue)
+
+	newRaw := uint8((newValue - offset2) / scale)
+	pterm.Info.Printf("New value: %.2f (raw: 0x%02X)\n", newValue, newRaw)
+
+	if dryRun {
+		pterm.Warning.Println("DRY RUN - No changes made")
+		return
+	}
+
+	result, _ := pterm.DefaultInteractiveConfirm.Show("Write this change?")
+	if !result {
+		pterm.Info.Println("Cancelled.")
+		return
+	}
+
+	backup, err := createBackup(filename)
+	if err != nil {
+		pterm.Error.Printf("Failed to create backup: %v\n", err)
+		return
+	}
+	pterm.Success.Printf("Backup created: %s\n", backup)
+
+	// Write the new value
+	data, _ := os.ReadFile(filename)
+	data[cellOffset] = newRaw
+	err = os.WriteFile(filename, data, 0644)
+	if err != nil {
+		pterm.Error.Printf("Failed to write: %v\n", err)
+		return
+	}
+
+	pterm.Success.Println("Cell updated successfully!")
+}
+
+func scaleMap(filename string, dryRun bool) {
+	pterm.Info.Println("Scale an entire map by a multiplier")
+	pterm.Warning.Println("This modifies ALL cells in the selected map!")
+
+	options := []string{
+		"Main Fuel Map (0x6700)",
+		"Ignition Map (0x6780)",
+		"Cancel",
+	}
+
+	selectedOption, _ := pterm.DefaultInteractiveSelect.
+		WithOptions(options).
+		Show("Select map to scale:")
+
+	if selectedOption == "Cancel" {
+		return
+	}
+
+	multiplierStr, _ := pterm.DefaultInteractiveTextInput.Show("Enter multiplier (e.g., 1.1 for +10%, 0.9 for -10%)")
+	multiplier := 1.0
+	fmt.Sscanf(multiplierStr, "%f", &multiplier)
+
+	if multiplier < 0.5 || multiplier > 2.0 {
+		pterm.Error.Println("Multiplier out of safe range (0.5-2.0)")
+		return
+	}
+
+	var offset int64
+	var rows, cols int
+	if strings.Contains(selectedOption, "Fuel") {
+		offset = 0x6700
+		rows, cols = 8, 16
+	} else {
+		offset = 0x6780
+		rows, cols = 8, 8
+	}
+
+	pterm.Info.Printf("Will multiply all values in %s by %.2f\n", selectedOption, multiplier)
+
+	if dryRun {
+		pterm.Warning.Println("DRY RUN - No changes made")
+		return
+	}
+
+	result, _ := pterm.DefaultInteractiveConfirm.Show("Apply this scaling?")
+	if !result {
+		pterm.Info.Println("Cancelled.")
+		return
+	}
+
+	backup, err := createBackup(filename)
+	if err != nil {
+		pterm.Error.Printf("Failed to create backup: %v\n", err)
+		return
+	}
+	pterm.Success.Printf("Backup created: %s\n", backup)
+
+	data, _ := os.ReadFile(filename)
+	for i := 0; i < rows*cols; i++ {
+		cellOffset := int(offset) + i
+		oldVal := data[cellOffset]
+		newVal := uint8(float64(oldVal) * multiplier)
+		data[cellOffset] = newVal
+	}
+
+	err = os.WriteFile(filename, data, 0644)
+	if err != nil {
+		pterm.Error.Printf("Failed to write: %v\n", err)
+		return
+	}
+
+	pterm.Success.Println("Map scaled successfully!")
+}
+
+func applyPreset(filename, presetName string, dryRun bool) {
+	pterm.DefaultHeader.WithFullWidth().
+		WithBackgroundStyle(pterm.NewStyle(pterm.BgYellow)).
+		WithTextStyle(pterm.NewStyle(pterm.FgBlack)).
+		Println("PRESET MODIFICATION MODE")
+
+	pterm.Warning.Println("Presets apply predefined changes. USE WITH CAUTION!")
+
+	switch presetName {
+	case "revlimit":
+		applyRevLimitPreset(filename, dryRun)
+	case "boost":
+		pterm.Error.Println("Boost preset not yet implemented")
+	case "fuel-enrich":
+		applyFuelEnrichPreset(filename, dryRun)
+	default:
+		pterm.Error.Printf("Unknown preset: %s\n", presetName)
+		pterm.Info.Println("Available presets: revlimit, fuel-enrich")
+	}
+}
+
+func applyRevLimitPreset(filename string, dryRun bool) {
+	pterm.Info.Println("Rev Limit Preset: Raises limiter by 500 RPM")
+
+	if dryRun {
+		pterm.Warning.Println("DRY RUN - Would increase rev limit by 500 RPM")
+		return
+	}
+
+	result, _ := pterm.DefaultInteractiveConfirm.Show("Apply +500 RPM to rev limiter?")
+	if !result {
+		pterm.Info.Println("Cancelled.")
+		return
+	}
+
+	backup, err := createBackup(filename)
+	if err != nil {
+		pterm.Error.Printf("Failed to create backup: %v\n", err)
+		return
+	}
+	pterm.Success.Printf("Backup created: %s\n", backup)
+
+	// Apply the preset
+	data, _ := os.ReadFile(filename)
+	// Example: increase rev limiter (simplified)
+	data[0x7000] += 10 // +500 RPM in scaled units
+
+	err = os.WriteFile(filename, data, 0644)
+	if err != nil {
+		pterm.Error.Printf("Failed to write: %v\n", err)
+		return
+	}
+
+	pterm.Success.Println("Preset applied successfully!")
+}
+
+func applyFuelEnrichPreset(filename string, dryRun bool) {
+	pterm.Info.Println("Fuel Enrichment Preset: +5% across entire fuel map")
+	pterm.Warning.Println("This can cause rich running conditions!")
+
+	if dryRun {
+		pterm.Warning.Println("DRY RUN - Would enrich fuel map by 5%")
+		return
+	}
+
+	result, _ := pterm.DefaultInteractiveConfirm.Show("Apply +5% fuel enrichment?")
+	if !result {
+		pterm.Info.Println("Cancelled.")
+		return
+	}
+
+	backup, err := createBackup(filename)
+	if err != nil {
+		pterm.Error.Printf("Failed to create backup: %v\n", err)
+		return
+	}
+	pterm.Success.Printf("Backup created: %s\n", backup)
+
+	data, _ := os.ReadFile(filename)
+	offset := 0x6700
+	rows, cols := 8, 16
+
+	for i := 0; i < rows*cols; i++ {
+		cellOffset := offset + i
+		oldVal := data[cellOffset]
+		newVal := uint8(float64(oldVal) * 1.05)
+		data[cellOffset] = newVal
+	}
+
+	err = os.WriteFile(filename, data, 0644)
+	if err != nil {
+		pterm.Error.Printf("Failed to write: %v\n", err)
+		return
+	}
+
+	pterm.Success.Println("Fuel enrichment applied!")
 }

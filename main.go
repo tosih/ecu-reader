@@ -359,7 +359,7 @@ func readMap(filename string, cfg MapConfig) (*ECUMap, error) {
 	}, nil
 }
 
-func renderMap(m *ECUMap, verbose bool) {
+func renderMap(m *ECUMap, verbose bool, displayMode string) {
 	width := m.Config.Cols*3 + 10
 	if width < 40 {
 		width = 40

@@ -121,25 +121,25 @@ func renderMap(m *ECUMap) {
 	// Render column headers
 	fmt.Print("║ RPM/Load │")
 	for j := 0; j < m.Config.Cols; j++ {
-		fmt.Printf(" %4d", j)
+		fmt.Printf("%3d", j)
 	}
 	fmt.Println(" ║")
-	fmt.Println("╠══════════╪" + strings.Repeat("═", m.Config.Cols*5) + "═╣")
+	fmt.Println("╠══════════╪" + strings.Repeat("═", m.Config.Cols*3) + "═╣")
 
 	// Render each row
 	for i := 0; i < m.Config.Rows; i++ {
 		fmt.Printf("║   %4d   │", i)
 		for j := 0; j < m.Config.Cols; j++ {
 			value := m.Data[i][j]
-			colorCode := getColorForValue(value, min, max)
-			fmt.Printf("%s%5.1f\033[0m", colorCode, value)
+			symbol := getSymbolForValue(value, min, max)
+			fmt.Printf(" %s ", symbol)
 		}
 		fmt.Println(" ║")
 	}
 
-	fmt.Printf("╚══════════╧" + strings.Repeat("═", m.Config.Cols*5) + "═╝\n")
+	fmt.Printf("╚══════════╧" + strings.Repeat("═", m.Config.Cols*3) + "═╝\n")
 	fmt.Printf("Range: %.1f - %.1f %s\n", min, max, m.Config.Unit)
-	fmt.Printf("Legend: \033[34m■\033[0m Low  \033[32m■\033[0m Medium  \033[33m■\033[0m High  \033[31m■\033[0m Very High\n")
+	fmt.Printf("Legend: \033[34m░\033[0m Low  \033[32m▒\033[0m Med  \033[33m▓\033[0m High  \033[31m█\033[0m Max\n")
 }
 
 func findMinMax(data [][]float64) (float64, float64) {
@@ -160,19 +160,19 @@ func findMinMax(data [][]float64) (float64, float64) {
 	return min, max
 }
 
-func getColorForValue(value, min, max float64) string {
+func getSymbolForValue(value, min, max float64) string {
 	// Normalize value between 0 and 1
 	normalized := (value - min) / (max - min)
 
-	// Return ANSI color codes
+	// Return colored density symbols
 	switch {
 	case normalized < 0.25:
-		return "\033[34m" // Blue (low)
+		return "\033[34m░\033[0m" // Blue light shade (low)
 	case normalized < 0.5:
-		return "\033[32m" // Green (medium-low)
+		return "\033[32m▒\033[0m" // Green medium shade (medium-low)
 	case normalized < 0.75:
-		return "\033[33m" // Yellow (medium-high)
+		return "\033[33m▓\033[0m" // Yellow dark shade (medium-high)
 	default:
-		return "\033[31m" // Red (high)
+		return "\033[31m█\033[0m" // Red full block (high)
 	}
 }

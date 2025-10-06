@@ -50,7 +50,7 @@ func main() {
 		scanForMaps(*filename)
 		return
 	}
-
+	
 	// Validate display mode
 	if *displayMode != "symbols" && *displayMode != "values" {
 		fmt.Println("Error: -display must be either 'symbols' or 'values'")
@@ -207,23 +207,23 @@ func scanForMaps(filename string) {
 	for offset := 0; offset < len(data)-64; offset += 0x40 {
 		if hasGoodVariance(data[offset : offset+64]) {
 			fmt.Printf("Offset 0x%04X: ", offset)
-
+			
 			// Show first row as preview
 			for i := 0; i < 8; i++ {
 				fmt.Printf("%02X ", data[offset+i])
 			}
 			fmt.Printf("...")
-
+			
 			// Calculate some stats
 			min, max, avg := getStats(data[offset : offset+64])
 			fmt.Printf(" [Min:%d Max:%d Avg:%.0f]\n", min, max, avg)
 		}
 	}
-
+	
 	fmt.Println("\n" + strings.Repeat("=", 70))
 	fmt.Println("Hex dump of interesting regions:")
 	fmt.Println(strings.Repeat("=", 70))
-
+	
 	// Show some specific regions known to contain maps in Motronic
 	regions := []struct {
 		start int
@@ -235,7 +235,7 @@ func scanForMaps(filename string) {
 		{0x7900, "Region 4 (0x7900)"},
 		{0x7A00, "Region 5 (0x7A00)"},
 	}
-
+	
 	for _, region := range regions {
 		if region.start+128 <= len(data) {
 			fmt.Printf("\n%s:\n", region.name)
@@ -248,10 +248,10 @@ func hasGoodVariance(data []byte) bool {
 	if len(data) < 2 {
 		return false
 	}
-
+	
 	min := data[0]
 	max := data[0]
-
+	
 	for _, b := range data {
 		if b < min {
 			min = b
@@ -260,7 +260,7 @@ func hasGoodVariance(data []byte) bool {
 			max = b
 		}
 	}
-
+	
 	// Good variance if range is at least 10 and not all zeros
 	return (max-min) >= 10 && max > 0
 }
@@ -269,11 +269,11 @@ func getStats(data []byte) (uint8, uint8, float64) {
 	if len(data) == 0 {
 		return 0, 0, 0
 	}
-
+	
 	min := data[0]
 	max := data[0]
 	sum := 0
-
+	
 	for _, b := range data {
 		if b < min {
 			min = b
@@ -283,7 +283,7 @@ func getStats(data []byte) (uint8, uint8, float64) {
 		}
 		sum += int(b)
 	}
-
+	
 	avg := float64(sum) / float64(len(data))
 	return min, max, avg
 }
@@ -293,15 +293,15 @@ func printHexDump(data []byte, offset, length int) {
 	if end > len(data) {
 		end = len(data)
 	}
-
+	
 	for i := offset; i < end; i += 16 {
 		fmt.Printf("  0x%04X: ", i)
-
+		
 		// Hex values
 		for j := 0; j < 16 && i+j < end; j++ {
 			fmt.Printf("%02X ", data[i+j])
 		}
-
+		
 		// ASCII representation
 		fmt.Print(" | ")
 		for j := 0; j < 16 && i+j < end; j++ {
@@ -332,7 +332,7 @@ func readMap(filename string, cfg MapConfig) (*ECUMap, error) {
 		data[i] = make([]float64, cfg.Cols)
 		for j := 0; j < cfg.Cols; j++ {
 			var value float64
-
+			
 			if cfg.DataType == "uint8" {
 				var rawValue uint8
 				err := binary.Read(f, binary.LittleEndian, &rawValue)
@@ -348,7 +348,7 @@ func readMap(filename string, cfg MapConfig) (*ECUMap, error) {
 				}
 				value = float64(rawValue)*cfg.Scale + cfg.Offset2
 			}
-
+			
 			data[i][j] = value
 		}
 	}
@@ -364,10 +364,10 @@ func renderMap(m *ECUMap, verbose bool, displayMode string) {
 	if width < 40 {
 		width = 40
 	}
-
+	
 	fmt.Printf("╔" + strings.Repeat("═", width) + "╗\n")
 	fmt.Printf("║ %-"+fmt.Sprintf("%d", width-2)+"s ║\n", m.Config.Name)
-	fmt.Printf("║ Offset: 0x%04X | Size: %dx%d | Type: %s %-"+fmt.Sprintf("%d", width-45)+"s ║\n",
+	fmt.Printf("║ Offset: 0x%04X | Size: %dx%d | Type: %s %-"+fmt.Sprintf("%d", width-45)+"s ║\n", 
 		m.Config.Offset, m.Config.Rows, m.Config.Cols, m.Config.DataType, "")
 	fmt.Printf("╠" + strings.Repeat("═", width) + "╣\n")
 
@@ -398,7 +398,7 @@ func renderMap(m *ECUMap, verbose bool, displayMode string) {
 	fmt.Printf("╚══════════╧" + strings.Repeat("═", m.Config.Cols*3) + "═╝\n")
 	fmt.Printf("Range: %.2f - %.2f %s\n", min, max, m.Config.Unit)
 	fmt.Printf("Legend: \033[34m░\033[0m Low  \033[32m▒\033[0m Med  \033[33m▓\033[0m High  \033[31m█\033[0m Max\n")
-
+	
 	if verbose {
 		fmt.Println("\nRaw Values:")
 		for i := 0; i < m.Config.Rows; i++ {
@@ -433,18 +433,18 @@ func getSymbolForValue(value, min, max float64) string {
 	if max == min {
 		return "\033[37m·\033[0m" // Gray dot if all values are the same
 	}
-
+	
 	normalized := (value - min) / (max - min)
 
 	switch {
 	case normalized < 0.25:
-		return "\033[34m░\033[0m"
+		return "\033[96m░\033[0m" // Cyan/light blue
 	case normalized < 0.5:
-		return "\033[32m▒\033[0m"
+		return "\033[32m▒\033[0m" // Green
 	case normalized < 0.75:
-		return "\033[33m▓\033[0m"
+		return "\033[33m▓\033[0m" // Yellow
 	default:
-		return "\033[31m█\033[0m"
+		return "\033[31m█\033[0m" // Red
 	}
 }
 
@@ -452,17 +452,17 @@ func getColorCode(value, min, max float64) string {
 	if max == min {
 		return "\033[37m" // Gray if all values are the same
 	}
-
+	
 	normalized := (value - min) / (max - min)
 
 	switch {
 	case normalized < 0.25:
-		return "\033[34m" // Blue (low)
+		return "\033[96m" // Cyan/light blue
 	case normalized < 0.5:
-		return "\033[32m" // Green (medium-low)
+		return "\033[32m" // Green
 	case normalized < 0.75:
-		return "\033[33m" // Yellow (medium-high)
+		return "\033[33m" // Yellow
 	default:
-		return "\033[31m" // Red (high)
+		return "\033[31m" // Red
 	}
 }

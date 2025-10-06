@@ -377,37 +377,43 @@ func renderMap(m *ECUMap, verbose bool, displayMode string) {
 func buildMapString(m *ECUMap, displayMode string, min, max float64) string {
 	var result strings.Builder
 
-	// Column headers
-	if displayMode == "values" {
-		result.WriteString("Load/RPM |")
-		for j := 0; j < m.Config.Cols; j++ {
-			result.WriteString(fmt.Sprintf("%5d", j))
-		}
-	} else {
-		result.WriteString("Load/RPM |")
-		for j := 0; j < m.Config.Cols; j++ {
-			result.WriteString(fmt.Sprintf("%d", j%10))
+	// Generate RPM axis labels (0-8000 RPM)
+	rpmStep := 8000 / m.Config.Cols
+	// Generate Load axis labels (0-100%)
+	loadStep := 100 / m.Config.Rows
+
+	// Column headers with RPM values
+	result.WriteString("    RPM → |")
+	for j := 0; j < m.Config.Cols; j++ {
+		rpm := j * rpmStep
+		if displayMode == "values" {
+			result.WriteString(fmt.Sprintf("%4d", rpm))
+		} else {
+			result.WriteString(fmt.Sprintf("%-4d", rpm))
 		}
 	}
 	result.WriteString("\n")
 
+	// Separator
 	if displayMode == "values" {
-		result.WriteString(strings.Repeat("-", 10) + "|" + strings.Repeat("-", m.Config.Cols*5) + "\n")
+		result.WriteString("  Load%  |" + strings.Repeat("-", m.Config.Cols*4) + "\n")
 	} else {
-		result.WriteString(strings.Repeat("-", 10) + "|" + strings.Repeat("-", m.Config.Cols) + "\n")
+		result.WriteString("  Load%  |" + strings.Repeat("-", m.Config.Cols*4) + "\n")
 	}
 
-	// Data rows
+	// Data rows with load percentage labels
 	for i := 0; i < m.Config.Rows; i++ {
-		result.WriteString(fmt.Sprintf("  %4d   |", i))
+		loadPct := i * loadStep
+		result.WriteString(fmt.Sprintf("   %3d ↓ |", loadPct))
 		for j := 0; j < m.Config.Cols; j++ {
 			value := m.Data[i][j]
 			if displayMode == "values" {
 				color := getColorStyle(value, min, max)
-				result.WriteString(color.Sprintf("%5.1f", value))
+				result.WriteString(color.Sprintf("%4.1f", value))
 			} else {
+				// 1x4 cell: 4 characters wide
 				symbol := getSymbolForValue(value, min, max)
-				result.WriteString(symbol)
+				result.WriteString(symbol + symbol + symbol + symbol)
 			}
 		}
 		result.WriteString("\n")
@@ -536,7 +542,7 @@ func interactiveEdit(filename string, dryRun bool) {
 	case "Edit Fuel Map Cell":
 		editMapCell(filename, 0x6700, "Fuel Map", 8, 16, 0.04, 0, dryRun)
 	case "Edit Ignition Map Cell":
-		editMapCell(filename, 0x6780, "Ignition Map", 8, 8, 0.75, -24.0, dryRun)
+		editMapCell(filename, 0x6780, "Ignition Map", 8, 16, 0.75, -24.0, dryRun)
 	case "Scale Entire Map (multiply)":
 		scaleMap(filename, dryRun)
 	case "Exit":
@@ -582,8 +588,6 @@ func editRevLimiter(filename string, dryRun bool) {
 	pterm.Success.Printf("Backup created: %s\n", backup)
 
 	data, _ := os.ReadFile(filename)
-	// M2.1 specific: Rev limiter often at different location
-	// This is an example - exact location varies by vehicle
 	scaled := uint8(rpm / 50)
 	if len(data) > 0x7000 {
 		data[0x7000] = scaled
@@ -614,7 +618,6 @@ func editMapCell(filename string, offset int64, mapName string, rows, cols int, 
 		return
 	}
 
-	// Read current value
 	f, err := os.Open(filename)
 	if err != nil {
 		pterm.Error.Printf("Error opening file: %v\n", err)
@@ -654,7 +657,6 @@ func editMapCell(filename string, offset int64, mapName string, rows, cols int, 
 	}
 	pterm.Success.Printf("Backup created: %s\n", backup)
 
-	// Write the new value
 	data, _ := os.ReadFile(filename)
 	data[cellOffset] = newRaw
 	err = os.WriteFile(filename, data, 0644)
@@ -700,7 +702,7 @@ func scaleMap(filename string, dryRun bool) {
 		rows, cols = 8, 16
 	} else {
 		offset = 0x6780
-		rows, cols = 8, 8
+		rows, cols = 8, 16
 	}
 
 	pterm.Info.Printf("Will multiply all values in %s by %.2f\n", selectedOption, multiplier)
@@ -782,10 +784,8 @@ func applyRevLimitPreset(filename string, dryRun bool) {
 	}
 	pterm.Success.Printf("Backup created: %s\n", backup)
 
-	// Apply the preset
 	data, _ := os.ReadFile(filename)
-	// Example: increase rev limiter (simplified)
-	data[0x7000] += 10 // +500 RPM in scaled units
+	data[0x7000] += 10
 
 	err = os.WriteFile(filename, data, 0644)
 	if err != nil {

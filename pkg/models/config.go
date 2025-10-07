@@ -25,7 +25,7 @@ var ConfigParams = []ConfigParam{
 		Name:        "Rev Limiter",
 		Offset:      0x7000,
 		DataType:    "uint8",
-		Scale:       50.0,
+		Scale:       85.37,
 		Offset2:     0,
 		Unit:        "RPM",
 		Description: "Maximum engine RPM limit",

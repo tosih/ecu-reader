@@ -10,7 +10,8 @@
       "Bash(gh repo rename:*)",
       "Bash(./motronic-m21-tool:*)",
       "Bash(cmp:*)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(python3:*)"
     ],
     "deny": [],
     "ask": []

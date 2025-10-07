@@ -1,4 +1,4 @@
-module github.com/tosih/ecu-reader
+module github.com/tosih/motronic-m21-tool
 
 go 1.25.1
 

@@ -11,7 +11,7 @@ This is a Go CLI tool for reading, analyzing, and editing Motronic M2.1 ECU bina
 ### Build and Run
 ```bash
 # Build the application
-go build -o ecu-reader main.go
+go build -o motronic-m21-tool main.go
 
 # Run directly with Go
 go run main.go -file <path-to-binary>

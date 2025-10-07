@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ECU Map Viewer - Motronic M2.1</title>
+    <title>Motronic M2.1 Tool</title>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <style>
         * {
@@ -198,6 +198,35 @@
             color: #888;
         }
 
+        .map-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #252525;
+            border-radius: 5px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .control-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85em;
+            color: #888;
+        }
+
+        .control-value {
+            color: #667eea;
+            font-weight: 600;
+        }
+
         @media (min-width: 1200px) {
             .map-grid.grid-2 {
                 grid-template-columns: repeat(2, 1fr);
@@ -207,30 +236,27 @@
 </head>
 <body>
     <header>
-        <h1>🏎️ ECU Map Viewer</h1>
-        <div class="subtitle" id="headerSubtitle">Motronic M2.1 - Interactive 3D Visualization</div>
+        <h1>⚙️ Motronic M2.1 Tool</h1>
+        <div class="subtitle" id="headerSubtitle">ECU Map Analyzer & Editor</div>
     </header>
 
     <div class="controls">
         <label style="color: #e0e0e0;">
-            File 1:
+            File:
             <select id="file1Select" onchange="onFileSelectionChange()"></select>
         </label>
         <label style="color: #e0e0e0;">
-            Compare with:
+            Compare:
             <select id="file2Select" onchange="onFileSelectionChange()">
-                <option value="">None (Single View)</option>
+                <option value="">None</option>
             </select>
         </label>
-        <button onclick="toggle3D()">Toggle 2D/3D View</button>
-        <button onclick="loadMaps()">Refresh Maps</button>
-        <label style="color: #e0e0e0; margin-left: 20px;">
+        <button onclick="toggle3D()">2D/3D</button>
+        <label style="color: #e0e0e0;">
             <input type="checkbox" id="showValues" onchange="loadMaps()" checked>
-            Show Values in 2D
+            Show Values
         </label>
     </div>
-
-    <div id="colorRangeControls" class="controls" style="margin-top: 10px; flex-direction: column; align-items: flex-start;"></div>
 
     <div id="mapGrid" class="map-grid"></div>
 
@@ -346,135 +372,19 @@
             }
         }
 
-        function initColorRangeControls() {
-            const container = document.getElementById('colorRangeControls');
-            const mapNames = [
-                'Main Fuel Map',
-                'Ignition Timing Map',
-                'Lambda Target Map',
-                'Boost Control Map',
-                'Cold Start Enrichment',
-                'Fuel Enrichment Map',
-                'Idle Control Map',
-                'Air Temp Correction',
-                'Throttle Position Map',
-                'Overrun Fuel Cut'
-            ];
 
-            const mapRanges = [
-                { min: 0, max: 15, step: 0.1 },      // Fuel (ms)
-                { min: -30, max: 180, step: 1 },     // Ignition (deg)
-                { min: 0.5, max: 3.5, step: 0.01 },  // Lambda
-                { min: 0, max: 30, step: 0.1 },      // Boost (bar)
-                { min: 0, max: 3, step: 0.01 },      // Cold Start (%)
-                { min: 0, max: 3, step: 0.01 },      // Fuel Enrichment (%)
-                { min: 0, max: 255, step: 1 },       // Idle Control (steps)
-                { min: 0, max: 3, step: 0.01 },      // Air Temp Correction (%)
-                { min: 0, max: 100, step: 1 },       // Throttle Position (%)
-                { min: 0, max: 800, step: 10 }       // Overrun Fuel Cut (rpm/10)
-            ];
-
-            container.innerHTML = '<h3 style="color: #667eea; margin-bottom: 10px;">Color Scale Ranges</h3>';
-
-            const grid = document.createElement('div');
-            grid.style.display = 'grid';
-            grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(450px, 1fr))';
-            grid.style.gap = '20px';
-            grid.style.width = '100%';
-
-            currentMaps.forEach((idx, i) => {
-                const range = mapRanges[i];
-                const control = document.createElement('div');
-                control.style.display = 'flex';
-                control.style.flexDirection = 'column';
-                control.style.gap = '10px';
-
-                control.innerHTML = `
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <label style="color: #e0e0e0; font-weight: 500;">${mapNames[i]}</label>
-                        <label style="color: #e0e0e0; display: flex; align-items: center; gap: 5px;">
-                            <input
-                                type="checkbox"
-                                id="auto_${idx}"
-                                checked
-                                onchange="toggleAutoRange('${idx}')"
-                            >
-                            Auto
-                        </label>
-                    </div>
-                    <div class="slider-container">
-                        <div class="slider-label">
-                            <span>Min</span>
-                            <span id="min_value_${idx}">${range.min.toFixed(2)}</span>
-                        </div>
-                        <input
-                            type="range"
-                            id="min_${idx}"
-                            min="${range.min}"
-                            max="${range.max}"
-                            step="${range.step}"
-                            value="${range.min}"
-                            disabled
-                            oninput="updateSliderValue('${idx}', 'min')"
-                            onchange="updateColorRange('${idx}')"
-                        >
-                    </div>
-                    <div class="slider-container">
-                        <div class="slider-label">
-                            <span>Max</span>
-                            <span id="max_value_${idx}">${range.max.toFixed(2)}</span>
-                        </div>
-                        <input
-                            type="range"
-                            id="max_${idx}"
-                            min="${range.min}"
-                            max="${range.max}"
-                            step="${range.step}"
-                            value="${range.max}"
-                            disabled
-                            oninput="updateSliderValue('${idx}', 'max')"
-                            onchange="updateColorRange('${idx}')"
-                        >
-                    </div>
-                `;
-                grid.appendChild(control);
-            });
-
-            container.appendChild(grid);
-        }
-
-        function updateSliderValue(idx, type) {
-            const slider = document.getElementById(`${type}_${idx}`);
-            const valueDisplay = document.getElementById(`${type}_value_${idx}`);
-            valueDisplay.textContent = parseFloat(slider.value).toFixed(2);
-        }
-
-        function toggleAutoRange(idx) {
-            const autoCheckbox = document.getElementById(`auto_${idx}`);
-            const minInput = document.getElementById(`min_${idx}`);
-            const maxInput = document.getElementById(`max_${idx}`);
-
-            colorRanges[idx].auto = autoCheckbox.checked;
-            minInput.disabled = autoCheckbox.checked;
-            maxInput.disabled = autoCheckbox.checked;
-
-            if (autoCheckbox.checked) {
-                colorRanges[idx].min = null;
-                colorRanges[idx].max = null;
-            }
-
-            loadMaps();
-        }
-
-        function updateColorRange(idx) {
-            const minInput = document.getElementById(`min_${idx}`);
-            const maxInput = document.getElementById(`max_${idx}`);
-
-            colorRanges[idx].min = minInput.value ? parseFloat(minInput.value) : null;
-            colorRanges[idx].max = maxInput.value ? parseFloat(maxInput.value) : null;
-
-            loadMaps();
-        }
+        const mapRanges = [
+            { min: 0, max: 15, step: 0.1 },      // Fuel (ms)
+            { min: -30, max: 180, step: 1 },     // Ignition (deg)
+            { min: 0.5, max: 3.5, step: 0.01 },  // Lambda
+            { min: 0, max: 30, step: 0.1 },      // Boost (bar)
+            { min: 0, max: 3, step: 0.01 },      // Cold Start (%)
+            { min: 0, max: 3, step: 0.01 },      // Fuel Enrichment (%)
+            { min: 0, max: 255, step: 1 },       // Idle Control (steps)
+            { min: 0, max: 3, step: 0.01 },      // Air Temp Correction (%)
+            { min: 0, max: 100, step: 1 },       // Throttle Position (%)
+            { min: 0, max: 800, step: 10 }       // Overrun Fuel Cut (rpm/10)
+        ];
 
         function renderMaps(maps) {
             const mapGrid = document.getElementById('mapGrid');
@@ -487,6 +397,8 @@
                 container.id = `map-${idx}`;
 
                 const stats = calculateStats(map.data);
+                const mapIdx = currentMaps[idx];
+                const range = mapRanges[idx];
 
                 container.innerHTML = `
                     <div class="map-header">
@@ -494,6 +406,40 @@
                         <div class="map-info">
                             <span>Offset: 0x${map.offset.toString(16).toUpperCase()}</span>
                             <span>Size: ${map.rows}x${map.cols}</span>
+                        </div>
+                    </div>
+                    <div class="map-controls">
+                        <div class="control-group">
+                            <div class="control-label">
+                                <span>Min Scale</span>
+                                <span class="control-value" id="min_value_${mapIdx}">${stats.min.toFixed(2)}</span>
+                            </div>
+                            <input
+                                type="range"
+                                id="min_${mapIdx}"
+                                min="${range.min}"
+                                max="${range.max}"
+                                step="${range.step}"
+                                value="${stats.min}"
+                                oninput="updateMapSlider('${mapIdx}', 'min')"
+                                onchange="replotMap(${idx})"
+                            >
+                        </div>
+                        <div class="control-group">
+                            <div class="control-label">
+                                <span>Max Scale</span>
+                                <span class="control-value" id="max_value_${mapIdx}">${stats.max.toFixed(2)}</span>
+                            </div>
+                            <input
+                                type="range"
+                                id="max_${mapIdx}"
+                                min="${range.min}"
+                                max="${range.max}"
+                                step="${range.step}"
+                                value="${stats.max}"
+                                oninput="updateMapSlider('${mapIdx}', 'max')"
+                                onchange="replotMap(${idx})"
+                            >
                         </div>
                     </div>
                     <div class="map-plot" id="plot-${idx}"></div>
@@ -520,6 +466,23 @@
                 mapGrid.appendChild(container);
                 plotMap(map, `plot-${idx}`, is3D, currentMaps[idx]);
             });
+        }
+
+        function updateMapSlider(mapIdx, type) {
+            const slider = document.getElementById(`${type}_${mapIdx}`);
+            const valueDisplay = document.getElementById(`${type}_value_${mapIdx}`);
+            valueDisplay.textContent = parseFloat(slider.value).toFixed(2);
+            colorRanges[mapIdx][type] = parseFloat(slider.value);
+            colorRanges[mapIdx].auto = false;
+        }
+
+        function replotMap(idx) {
+            const mapData = document.getElementById(`map-${idx}`);
+            if (!mapData) return;
+
+            fetch(`/api/map/${currentMaps[idx]}?file=${encodeURIComponent(selectedFile1)}`)
+                .then(r => r.json())
+                .then(map => plotMap(map, `plot-${idx}`, is3D, currentMaps[idx]));
         }
 
         function plotMap(map, plotId, use3D, mapIdx) {
@@ -827,9 +790,6 @@
         window.addEventListener('load', async () => {
             // Load available files
             await loadFileList();
-
-            // Initialize controls
-            initColorRangeControls();
 
             // Load maps for the default file
             if (selectedFile1) {

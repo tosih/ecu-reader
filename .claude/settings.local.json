@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go build:*)",
+      "Bash(timeout:*)",
+      "Bash(./ecu-reader:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

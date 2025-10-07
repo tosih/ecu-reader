@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECU Map Viewer - Motronic M2.1</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #0f0f0f;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .controls {
+            background: #1a1a1a;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        select, button {
+            padding: 10px 20px;
+            border-radius: 5px;
+            border: none;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        select {
+            background: #2a2a2a;
+            color: #e0e0e0;
+            border: 1px solid #3a3a3a;
+        }
+
+        select:hover {
+            border-color: #667eea;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+        }
+
+        button:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .map-grid {
+            display: grid;
+            gap: 20px;
+        }
+
+        .map-container {
+            background: #1a1a1a;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .map-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #2a2a2a;
+        }
+
+        .map-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .map-info {
+            display: flex;
+            gap: 20px;
+            font-size: 0.9em;
+            color: #888;
+        }
+
+        .map-plot {
+            height: 500px;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .stat {
+            background: #2a2a2a;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 0.8em;
+            color: #888;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 1.2em;
+            color: #667eea;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            background: #2a2a2a;
+            outline: none;
+            border-radius: 3px;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #667eea;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background: #667eea;
+            cursor: pointer;
+            border-radius: 50%;
+            border: none;
+        }
+
+        input[type="range"]:disabled {
+            opacity: 0.5;
+        }
+
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85em;
+            color: #888;
+        }
+
+        @media (min-width: 1200px) {
+            .map-grid.grid-2 {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🏎️ ECU Map Viewer</h1>
+        <div class="subtitle">Motronic M2.1 - Interactive 3D Visualization</div>
+    </header>
+
+    <div class="controls">
+        <button onclick="toggle3D()">Toggle 2D/3D View</button>
+        <button onclick="loadMaps()">Refresh Maps</button>
+        <label style="color: #e0e0e0; margin-left: 20px;">
+            <input type="checkbox" id="showValues" onchange="loadMaps()" checked>
+            Show Values in 2D
+        </label>
+    </div>
+
+    <div id="colorRangeControls" class="controls" style="margin-top: 10px; flex-direction: column; align-items: flex-start;"></div>
+
+    <div id="mapGrid" class="map-grid"></div>
+
+    <script>
+        let is3D = false; // Default to 2D
+        const currentMaps = ['0', '1', '2', '3', '4']; // All maps
+        let mode = 'single'; // Will be set to 'compare' if in comparison mode
+
+        // Color scale ranges for each map (min/max for heatmap)
+        const colorRanges = {
+            '0': { min: null, max: null, auto: true }, // Main Fuel Map
+            '1': { min: null, max: null, auto: true }, // Ignition Timing Map
+            '2': { min: null, max: null, auto: true }, // Lambda Target Map
+            '3': { min: null, max: null, auto: true }, // Boost Control Map
+            '4': { min: null, max: null, auto: true }  // Cold Start Enrichment
+        };
+
+        async function loadMaps() {
+            const mapGrid = document.getElementById('mapGrid');
+            mapGrid.innerHTML = '<div class="loading">Loading maps...</div>';
+
+            try {
+                if (mode === 'compare') {
+                    const maps = await Promise.all(
+                        currentMaps.map(idx =>
+                            fetch(`/api/compare/${idx}`).then(r => {
+                                if (!r.ok) throw new Error(`Failed to load map ${idx}`);
+                                return r.json();
+                            })
+                        )
+                    );
+                    renderCompareMaps(maps);
+                } else {
+                    const maps = await Promise.all(
+                        currentMaps.map(idx =>
+                            fetch(`/api/map/${idx}`).then(r => {
+                                if (!r.ok) throw new Error(`Failed to load map ${idx}`);
+                                return r.json();
+                            })
+                        )
+                    );
+                    renderMaps(maps);
+                }
+            } catch (error) {
+                mapGrid.innerHTML = `<div class="loading">Error loading maps: ${error.message}</div>`;
+                console.error('Error loading maps:', error);
+            }
+        }
+
+        function initColorRangeControls() {
+            const container = document.getElementById('colorRangeControls');
+            const mapNames = [
+                'Main Fuel Map',
+                'Ignition Timing Map',
+                'Lambda Target Map',
+                'Boost Control Map',
+                'Cold Start Enrichment',
+                'Fuel Enrichment Map',
+                'Idle Control Map',
+                'Air Temp Correction',
+                'Throttle Position Map',
+                'Overrun Fuel Cut'
+            ];
+
+            const mapRanges = [
+                { min: 0, max: 15, step: 0.1 },      // Fuel (ms)
+                { min: -30, max: 180, step: 1 },     // Ignition (deg)
+                { min: 0.5, max: 3.5, step: 0.01 },  // Lambda
+                { min: 0, max: 30, step: 0.1 },      // Boost (bar)
+                { min: 0, max: 3, step: 0.01 },      // Cold Start (%)
+                { min: 0, max: 3, step: 0.01 },      // Fuel Enrichment (%)
+                { min: 0, max: 255, step: 1 },       // Idle Control (steps)
+                { min: 0, max: 3, step: 0.01 },      // Air Temp Correction (%)
+                { min: 0, max: 100, step: 1 },       // Throttle Position (%)
+                { min: 0, max: 800, step: 10 }       // Overrun Fuel Cut (rpm/10)
+            ];
+
+            container.innerHTML = '<h3 style="color: #667eea; margin-bottom: 10px;">Color Scale Ranges</h3>';
+
+            const grid = document.createElement('div');
+            grid.style.display = 'grid';
+            grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(450px, 1fr))';
+            grid.style.gap = '20px';
+            grid.style.width = '100%';
+
+            currentMaps.forEach((idx, i) => {
+                const range = mapRanges[i];
+                const control = document.createElement('div');
+                control.style.display = 'flex';
+                control.style.flexDirection = 'column';
+                control.style.gap = '10px';
+
+                control.innerHTML = `
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <label style="color: #e0e0e0; font-weight: 500;">${mapNames[i]}</label>
+                        <label style="color: #e0e0e0; display: flex; align-items: center; gap: 5px;">
+                            <input
+                                type="checkbox"
+                                id="auto_${idx}"
+                                checked
+                                onchange="toggleAutoRange('${idx}')"
+                            >
+                            Auto
+                        </label>
+                    </div>
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <span>Min</span>
+                            <span id="min_value_${idx}">${range.min.toFixed(2)}</span>
+                        </div>
+                        <input
+                            type="range"
+                            id="min_${idx}"
+                            min="${range.min}"
+                            max="${range.max}"
+                            step="${range.step}"
+                            value="${range.min}"
+                            disabled
+                            oninput="updateSliderValue('${idx}', 'min')"
+                            onchange="updateColorRange('${idx}')"
+                        >
+                    </div>
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <span>Max</span>
+                            <span id="max_value_${idx}">${range.max.toFixed(2)}</span>
+                        </div>
+                        <input
+                            type="range"
+                            id="max_${idx}"
+                            min="${range.min}"
+                            max="${range.max}"
+                            step="${range.step}"
+                            value="${range.max}"
+                            disabled
+                            oninput="updateSliderValue('${idx}', 'max')"
+                            onchange="updateColorRange('${idx}')"
+                        >
+                    </div>
+                `;
+                grid.appendChild(control);
+            });
+
+            container.appendChild(grid);
+        }
+
+        function updateSliderValue(idx, type) {
+            const slider = document.getElementById(`${type}_${idx}`);
+            const valueDisplay = document.getElementById(`${type}_value_${idx}`);
+            valueDisplay.textContent = parseFloat(slider.value).toFixed(2);
+        }
+
+        function toggleAutoRange(idx) {
+            const autoCheckbox = document.getElementById(`auto_${idx}`);
+            const minInput = document.getElementById(`min_${idx}`);
+            const maxInput = document.getElementById(`max_${idx}`);
+
+            colorRanges[idx].auto = autoCheckbox.checked;
+            minInput.disabled = autoCheckbox.checked;
+            maxInput.disabled = autoCheckbox.checked;
+
+            if (autoCheckbox.checked) {
+                colorRanges[idx].min = null;
+                colorRanges[idx].max = null;
+            }
+
+            loadMaps();
+        }
+
+        function updateColorRange(idx) {
+            const minInput = document.getElementById(`min_${idx}`);
+            const maxInput = document.getElementById(`max_${idx}`);
+
+            colorRanges[idx].min = minInput.value ? parseFloat(minInput.value) : null;
+            colorRanges[idx].max = maxInput.value ? parseFloat(maxInput.value) : null;
+
+            loadMaps();
+        }
+
+        function renderMaps(maps) {
+            const mapGrid = document.getElementById('mapGrid');
+            mapGrid.className = `map-grid ${maps.length === 2 ? 'grid-2' : ''}`;
+            mapGrid.innerHTML = '';
+
+            maps.forEach((map, idx) => {
+                const container = document.createElement('div');
+                container.className = 'map-container';
+                container.id = `map-${idx}`;
+
+                const stats = calculateStats(map.data);
+
+                container.innerHTML = `
+                    <div class="map-header">
+                        <div class="map-title">${map.name}</div>
+                        <div class="map-info">
+                            <span>Offset: 0x${map.offset.toString(16).toUpperCase()}</span>
+                            <span>Size: ${map.rows}x${map.cols}</span>
+                        </div>
+                    </div>
+                    <div class="map-plot" id="plot-${idx}"></div>
+                    <div class="stats-grid">
+                        <div class="stat">
+                            <div class="stat-label">Min Value</div>
+                            <div class="stat-value">${stats.min.toFixed(2)} ${map.unit}</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-label">Max Value</div>
+                            <div class="stat-value">${stats.max.toFixed(2)} ${map.unit}</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-label">Average</div>
+                            <div class="stat-value">${stats.avg.toFixed(2)} ${map.unit}</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-label">Range</div>
+                            <div class="stat-value">${(stats.max - stats.min).toFixed(2)} ${map.unit}</div>
+                        </div>
+                    </div>
+                `;
+
+                mapGrid.appendChild(container);
+                plotMap(map, `plot-${idx}`, is3D, currentMaps[idx]);
+            });
+        }
+
+        function plotMap(map, plotId, use3D, mapIdx) {
+            const rpmStep = 8000 / map.cols;
+            const loadStep = 100 / map.rows;
+
+            const rpm = Array.from({length: map.cols}, (_, i) => i * rpmStep);
+            const load = Array.from({length: map.rows}, (_, i) => i * loadStep);
+
+            const showValues = document.getElementById('showValues')?.checked ?? true;
+
+            // Get color range settings for this map
+            const range = colorRanges[mapIdx];
+            let zmin, zmax;
+
+            if (range && !range.auto) {
+                zmin = range.min !== null ? range.min : undefined;
+                zmax = range.max !== null ? range.max : undefined;
+            }
+
+            const trace = {
+                z: map.data,
+                x: rpm,
+                y: load,
+                type: use3D ? 'surface' : 'heatmap',
+                colorscale: [
+                    [0, '#0d47a1'],
+                    [0.2, '#1976d2'],
+                    [0.4, '#42a5f5'],
+                    [0.6, '#66bb6a'],
+                    [0.8, '#ffa726'],
+                    [1, '#f44336']
+                ],
+                colorbar: {
+                    title: {
+                        text: map.unit,
+                        side: 'right'
+                    },
+                    tickfont: { color: '#e0e0e0' },
+                    titlefont: { color: '#e0e0e0' }
+                },
+                zmin: zmin,
+                zmax: zmax
+            };
+
+            // Add text annotations for 2D heatmap if enabled
+            if (!use3D && showValues) {
+                const textData = map.data.map(row =>
+                    row.map(val => val.toFixed(2))
+                );
+                trace.text = textData;
+                trace.texttemplate = '%{text}';
+                trace.textfont = {
+                    size: Math.max(8, Math.min(12, 400 / Math.max(map.rows, map.cols))),
+                    color: '#ffffff'
+                };
+            }
+
+            const layout = {
+                paper_bgcolor: '#1a1a1a',
+                plot_bgcolor: '#1a1a1a',
+                font: { color: '#e0e0e0' },
+                margin: { l: 50, r: 50, t: 10, b: 50 },
+                autosize: true
+            };
+
+            if (use3D) {
+                layout.scene = {
+                    xaxis: {
+                        title: 'RPM',
+                        gridcolor: '#2a2a2a',
+                        color: '#e0e0e0',
+                        backgroundcolor: '#1a1a1a'
+                    },
+                    yaxis: {
+                        title: 'Load %',
+                        gridcolor: '#2a2a2a',
+                        color: '#e0e0e0',
+                        backgroundcolor: '#1a1a1a'
+                    },
+                    zaxis: {
+                        title: map.unit,
+                        gridcolor: '#2a2a2a',
+                        color: '#e0e0e0',
+                        backgroundcolor: '#1a1a1a'
+                    },
+                    camera: {
+                        eye: { x: 1.5, y: 1.5, z: 1.3 }
+                    },
+                    bgcolor: '#1a1a1a'
+                };
+            } else {
+                layout.xaxis = {
+                    title: 'RPM',
+                    gridcolor: '#2a2a2a',
+                    color: '#e0e0e0'
+                };
+                layout.yaxis = {
+                    title: 'Load %',
+                    gridcolor: '#2a2a2a',
+                    color: '#e0e0e0'
+                };
+            }
+
+            const config = {
+                responsive: true,
+                displayModeBar: true,
+                displaylogo: false,
+                modeBarButtonsToRemove: ['lasso2d', 'select2d']
+            };
+
+            Plotly.newPlot(plotId, [trace], layout, config);
+        }
+
+        function calculateStats(data) {
+            const flat = data.flat();
+            return {
+                min: Math.min(...flat),
+                max: Math.max(...flat),
+                avg: flat.reduce((a, b) => a + b, 0) / flat.length
+            };
+        }
+
+        function toggle3D() {
+            is3D = !is3D;
+            const maps = document.querySelectorAll('[id^="map-"]');
+            maps.forEach((_, idx) => {
+                fetch(`/api/map/${currentMaps[idx]}`)
+                    .then(r => r.json())
+                    .then(map => plotMap(map, `plot-${idx}`, is3D, currentMaps[idx]));
+            });
+        }
+
+        function renderCompareMaps(maps) {
+            const mapGrid = document.getElementById('mapGrid');
+            mapGrid.className = 'map-grid';
+            mapGrid.innerHTML = '';
+
+            maps.forEach((map, idx) => {
+                const container = document.createElement('div');
+                container.className = 'map-container';
+                container.id = `map-${idx}`;
+
+                const stats1 = calculateStats(map.data1);
+                const stats2 = calculateStats(map.data2);
+                const diffStats = calculateStats(map.diff);
+
+                container.innerHTML = `
+                    <div class="map-header">
+                        <div class="map-title">${map.name}</div>
+                        <div class="map-info">
+                            <span>Offset: 0x${map.offset.toString(16).toUpperCase()}</span>
+                            <span>Size: ${map.rows}x${map.cols}</span>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+                        <div class="map-plot" id="plot1-${idx}" style="height: 300px;"></div>
+                        <div class="map-plot" id="plot2-${idx}" style="height: 300px;"></div>
+                        <div class="map-plot" id="plotdiff-${idx}" style="height: 300px;"></div>
+                    </div>
+                    <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
+                        <div>
+                            <div style="font-weight: 600; color: #667eea; margin-bottom: 5px;">File 1</div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+                                <div class="stat">
+                                    <div class="stat-label">Min</div>
+                                    <div class="stat-value">${stats1.min.toFixed(2)} ${map.unit}</div>
+                                </div>
+                                <div class="stat">
+                                    <div class="stat-label">Max</div>
+                                    <div class="stat-value">${stats1.max.toFixed(2)} ${map.unit}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <div style="font-weight: 600; color: #667eea; margin-bottom: 5px;">File 2</div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+                                <div class="stat">
+                                    <div class="stat-label">Min</div>
+                                    <div class="stat-value">${stats2.min.toFixed(2)} ${map.unit}</div>
+                                </div>
+                                <div class="stat">
+                                    <div class="stat-label">Max</div>
+                                    <div class="stat-value">${stats2.max.toFixed(2)} ${map.unit}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <div style="font-weight: 600; color: #667eea; margin-bottom: 5px;">Difference</div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+                                <div class="stat">
+                                    <div class="stat-label">Min Δ</div>
+                                    <div class="stat-value">${diffStats.min.toFixed(2)} ${map.unit}</div>
+                                </div>
+                                <div class="stat">
+                                    <div class="stat-label">Max Δ</div>
+                                    <div class="stat-value">${diffStats.max.toFixed(2)} ${map.unit}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                mapGrid.appendChild(container);
+
+                // Plot all three maps
+                const fakeMap1 = { ...map, data: map.data1 };
+                const fakeMap2 = { ...map, data: map.data2 };
+                const fakeDiff = { ...map, data: map.diff };
+
+                plotMap(fakeMap1, `plot1-${idx}`, is3D, currentMaps[idx]);
+                plotMap(fakeMap2, `plot2-${idx}`, is3D, currentMaps[idx]);
+                plotDifferenceMap(fakeDiff, `plotdiff-${idx}`, is3D);
+            });
+        }
+
+        function plotDifferenceMap(map, plotId, use3D) {
+            const rpmStep = 8000 / map.cols;
+            const loadStep = 100 / map.rows;
+
+            const rpm = Array.from({length: map.cols}, (_, i) => i * rpmStep);
+            const load = Array.from({length: map.rows}, (_, i) => i * loadStep);
+
+            const showValues = document.getElementById('showValues')?.checked ?? true;
+
+            // Find max absolute difference for scaling
+            let maxAbs = 0;
+            for (let row of map.data) {
+                for (let val of row) {
+                    maxAbs = Math.max(maxAbs, Math.abs(val));
+                }
+            }
+
+            const trace = {
+                z: map.data,
+                x: rpm,
+                y: load,
+                type: use3D ? 'surface' : 'heatmap',
+                colorscale: [
+                    [0, '#0d47a1'],    // Large negative - dark blue
+                    [0.25, '#42a5f5'], // Small negative - light blue
+                    [0.5, '#888888'],  // No change - gray
+                    [0.75, '#ffa726'], // Small positive - orange
+                    [1, '#f44336']     // Large positive - red
+                ],
+                zmid: 0, // Center the color scale at zero
+                colorbar: {
+                    title: {
+                        text: `Δ ${map.unit}`,
+                        side: 'right'
+                    },
+                    tickfont: { color: '#e0e0e0' },
+                    titlefont: { color: '#e0e0e0' }
+                }
+            };
+
+            if (!use3D && showValues) {
+                const textData = map.data.map(row =>
+                    row.map(val => (val >= 0 ? '+' : '') + val.toFixed(2))
+                );
+                trace.text = textData;
+                trace.texttemplate = '%{text}';
+                trace.textfont = {
+                    size: Math.max(8, Math.min(12, 400 / Math.max(map.rows, map.cols))),
+                    color: '#ffffff'
+                };
+            }
+
+            const layout = {
+                paper_bgcolor: '#1a1a1a',
+                plot_bgcolor: '#1a1a1a',
+                font: { color: '#e0e0e0' },
+                margin: { l: 30, r: 30, t: 30, b: 30 },
+                autosize: true,
+                title: {
+                    text: 'Difference (File2 - File1)',
+                    font: { color: '#e0e0e0', size: 12 }
+                }
+            };
+
+            if (use3D) {
+                layout.scene = {
+                    xaxis: { title: 'RPM', gridcolor: '#2a2a2a', color: '#e0e0e0', backgroundcolor: '#1a1a1a' },
+                    yaxis: { title: 'Load %', gridcolor: '#2a2a2a', color: '#e0e0e0', backgroundcolor: '#1a1a1a' },
+                    zaxis: { title: map.unit, gridcolor: '#2a2a2a', color: '#e0e0e0', backgroundcolor: '#1a1a1a' },
+                    camera: { eye: { x: 1.5, y: 1.5, z: 1.3 } },
+                    bgcolor: '#1a1a1a'
+                };
+            } else {
+                layout.xaxis = { title: 'RPM', gridcolor: '#2a2a2a', color: '#e0e0e0' };
+                layout.yaxis = { title: 'Load %', gridcolor: '#2a2a2a', color: '#e0e0e0' };
+            }
+
+            const config = {
+                responsive: true,
+                displayModeBar: true,
+                displaylogo: false,
+                modeBarButtonsToRemove: ['lasso2d', 'select2d']
+            };
+
+            Plotly.newPlot(plotId, [trace], layout, config);
+        }
+
+        // Load on startup
+        window.addEventListener('load', async () => {
+            // Check mode
+            const modeResponse = await fetch('/api/mode');
+            const modeData = await modeResponse.json();
+            mode = modeData.mode;
+
+            // Update header if in compare mode
+            if (mode === 'compare') {
+                document.querySelector('header .subtitle').textContent =
+                    `Comparing: ${modeData.file1} vs ${modeData.file2}`;
+            }
+
+            initColorRangeControls();
+            loadMaps();
+        });
+    </script>
+</body>
+</html>

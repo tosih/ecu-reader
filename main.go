@@ -11,6 +11,7 @@ import (
 	"github.com/tosih/ecu-reader/pkg/reader"
 	"github.com/tosih/ecu-reader/pkg/renderer"
 	"github.com/tosih/ecu-reader/pkg/scanner"
+	"github.com/tosih/ecu-reader/pkg/web"
 )
 
 func main() {
@@ -25,6 +26,8 @@ func main() {
 	importFile := flag.String("import", "", "Import map from CSV file")
 	compareFile := flag.String("compare", "", "Compare current file with another ECU file")
 	list := flag.Bool("list", false, "List all available maps")
+	webMode := flag.Bool("web", false, "Launch web interface for interactive visualization")
+	port := flag.Int("port", 8080, "Port for web server (default: 8080)")
 
 	flag.Parse()
 
@@ -37,6 +40,21 @@ func main() {
 	// List available maps
 	if *list {
 		renderer.ListAvailableMaps()
+		return
+	}
+
+	// Web interface mode
+	if *webMode {
+		var server *web.Server
+		if *compareFile != "" {
+			server = web.NewCompareServer(*filename, *compareFile, *port)
+		} else {
+			server = web.NewServer(*filename, *port)
+		}
+		if err := server.Start(); err != nil {
+			pterm.Error.Printf("Web server error: %v\n", err)
+			os.Exit(1)
+		}
 		return
 	}
 

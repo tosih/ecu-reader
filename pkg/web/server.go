@@ -105,6 +105,7 @@ func (s *Server) Start() error {
 	http.HandleFunc("/", s.handleIndex)
 	http.HandleFunc("/api/files", s.handleFileList)
 	http.HandleFunc("/api/config", s.handleConfigData)
+	http.HandleFunc("/api/config/update", s.handleConfigUpdate)
 	http.HandleFunc("/api/map/", s.handleMapData)
 	http.HandleFunc("/api/compare/", s.handleCompareData)
 	http.HandleFunc("/api/mode", s.handleMode)
@@ -314,6 +315,55 @@ func (s *Server) handleCompareData(w http.ResponseWriter, r *http.Request) {
 		Diff:      diff,
 		Filename1: filepath.Base(file1),
 		Filename2: filepath.Base(file2),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+type ConfigUpdateRequest struct {
+	File  string  `json:"file"`
+	Param string  `json:"param"`
+	Value float64 `json:"value"`
+}
+
+func (s *Server) handleConfigUpdate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req ConfigUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("Invalid request: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// Validate file exists
+	if req.File == "" {
+		http.Error(w, "File parameter required", http.StatusBadRequest)
+		return
+	}
+
+	// Write the config parameter
+	if err := reader.WriteConfigParam(req.File, req.Param, req.Value); err != nil {
+		http.Error(w, fmt.Sprintf("Error updating config: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Return updated config
+	config, err := reader.ReadConfigParams(req.File)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error reading updated config: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"success":  true,
+		"message":  fmt.Sprintf("Updated %s to %.2f", req.Param, req.Value),
+		"params":   config.Params,
+		"values":   config.Values,
+		"filename": filepath.Base(req.File),
 	}
 
 	w.Header().Set("Content-Type", "application/json")

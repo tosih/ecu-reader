@@ -280,6 +280,13 @@
             text-align: right;
         }
 
+        .config-value-edit {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            justify-content: flex-end;
+        }
+
         @media (min-width: 1200px) {
             .map-grid.grid-2 {
                 grid-template-columns: repeat(2, 1fr);
@@ -430,10 +437,71 @@
                         <div class="config-name">${param.Name}</div>
                         <div class="config-desc">${param.Description}</div>
                     </div>
-                    <div class="config-value">${value.toFixed(0)} ${param.Unit}</div>
+                    <div class="config-value-edit">
+                        <input type="number"
+                               id="config-${param.Name.replace(/\s+/g, '-')}"
+                               value="${value.toFixed(2)}"
+                               min="${param.MinValue}"
+                               max="${param.MaxValue}"
+                               step="0.01"
+                               style="width: 100px; padding: 5px; border-radius: 3px; border: 1px solid #3a3a3a; background: #2a2a2a; color: #e0e0e0; margin-right: 5px;">
+                        <span style="margin-right: 10px;">${param.Unit}</span>
+                        <button onclick="updateConfigParam('${param.Name}')"
+                                style="padding: 5px 15px; font-size: 0.9em;">
+                            Update
+                        </button>
+                    </div>
                 `;
                 configGrid.appendChild(item);
             });
+        }
+
+        async function updateConfigParam(paramName) {
+            if (!selectedFile1) {
+                alert('No file selected');
+                return;
+            }
+
+            const inputId = `config-${paramName.replace(/\s+/g, '-')}`;
+            const inputElement = document.getElementById(inputId);
+            const newValue = parseFloat(inputElement.value);
+
+            if (isNaN(newValue)) {
+                alert('Invalid value');
+                return;
+            }
+
+            if (!confirm(`Update ${paramName} to ${newValue}?\n\nThis will create a backup and modify the binary file.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/config/update', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        file: selectedFile1,
+                        param: paramName,
+                        value: newValue
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.text();
+                    throw new Error(error);
+                }
+
+                const data = await response.json();
+                alert(data.message);
+
+                // Reload config to show updated values
+                loadConfig();
+            } catch (error) {
+                alert(`Error updating config: ${error.message}`);
+                console.error('Error:', error);
+            }
         }
 
         async function loadMaps() {

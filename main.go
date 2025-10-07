@@ -39,6 +39,28 @@ func main() {
 		return
 	}
 
+	// Web interface mode
+	if *webMode {
+		var server *web.Server
+		fileOrDir := *filename
+
+		// If no file specified, use bins/ directory
+		if fileOrDir == "" {
+			fileOrDir = "bins"
+		}
+
+		if *compareFile != "" {
+			server = web.NewCompareServer(fileOrDir, *compareFile, *port)
+		} else {
+			server = web.NewServer(fileOrDir, *port)
+		}
+		if err := server.Start(); err != nil {
+			pterm.Error.Printf("Web server error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	// If no file specified, scan bins/ directory and list available files
 	if *filename == "" {
 		binFiles := findBinFiles("bins")
@@ -70,28 +92,6 @@ func main() {
 		pterm.Info.Printf("\nFound %d .bin file(s) in bins/ directory\n", len(binFiles))
 		pterm.Info.Println("Use -file <path> to analyze a specific file")
 		pterm.Info.Println("Use -web to launch web interface with all files")
-		return
-	}
-
-	// Web interface mode
-	if *webMode {
-		var server *web.Server
-		fileOrDir := *filename
-
-		// If no file specified, use bins/ directory
-		if fileOrDir == "" {
-			fileOrDir = "bins"
-		}
-
-		if *compareFile != "" {
-			server = web.NewCompareServer(fileOrDir, *compareFile, *port)
-		} else {
-			server = web.NewServer(fileOrDir, *port)
-		}
-		if err := server.Start(); err != nil {
-			pterm.Error.Printf("Web server error: %v\n", err)
-			os.Exit(1)
-		}
 		return
 	}
 

@@ -1,4 +1,4 @@
-module tosih.org/ecu-reader
+module github.com/tosih/ecu-reader
 
 go 1.25.1
 

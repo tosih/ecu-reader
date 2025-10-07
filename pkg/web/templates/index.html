@@ -208,10 +208,20 @@
 <body>
     <header>
         <h1>🏎️ ECU Map Viewer</h1>
-        <div class="subtitle">Motronic M2.1 - Interactive 3D Visualization</div>
+        <div class="subtitle" id="headerSubtitle">Motronic M2.1 - Interactive 3D Visualization</div>
     </header>
 
     <div class="controls">
+        <label style="color: #e0e0e0;">
+            File 1:
+            <select id="file1Select" onchange="onFileSelectionChange()"></select>
+        </label>
+        <label style="color: #e0e0e0;">
+            Compare with:
+            <select id="file2Select" onchange="onFileSelectionChange()">
+                <option value="">None (Single View)</option>
+            </select>
+        </label>
         <button onclick="toggle3D()">Toggle 2D/3D View</button>
         <button onclick="loadMaps()">Refresh Maps</button>
         <label style="color: #e0e0e0; margin-left: 20px;">
@@ -228,6 +238,9 @@
         let is3D = false; // Default to 2D
         const currentMaps = ['0', '1', '2', '3', '4']; // All maps
         let mode = 'single'; // Will be set to 'compare' if in comparison mode
+        let availableFiles = [];
+        let selectedFile1 = '';
+        let selectedFile2 = '';
 
         // Color scale ranges for each map (min/max for heatmap)
         const colorRanges = {
@@ -238,15 +251,73 @@
             '4': { min: null, max: null, auto: true }  // Cold Start Enrichment
         };
 
+        async function loadFileList() {
+            try {
+                const response = await fetch('/api/files');
+                availableFiles = await response.json();
+
+                const file1Select = document.getElementById('file1Select');
+                const file2Select = document.getElementById('file2Select');
+
+                // Clear and populate file selects
+                file1Select.innerHTML = '';
+                file2Select.innerHTML = '<option value="">None (Single View)</option>';
+
+                availableFiles.forEach(file => {
+                    const option1 = document.createElement('option');
+                    option1.value = file.path;
+                    option1.textContent = file.name;
+                    file1Select.appendChild(option1);
+
+                    const option2 = document.createElement('option');
+                    option2.value = file.path;
+                    option2.textContent = file.name;
+                    file2Select.appendChild(option2);
+                });
+
+                if (availableFiles.length > 0) {
+                    selectedFile1 = availableFiles[0].path;
+                    file1Select.value = selectedFile1;
+                }
+            } catch (error) {
+                console.error('Error loading file list:', error);
+            }
+        }
+
+        function onFileSelectionChange() {
+            const file1Select = document.getElementById('file1Select');
+            const file2Select = document.getElementById('file2Select');
+
+            selectedFile1 = file1Select.value;
+            selectedFile2 = file2Select.value;
+
+            mode = selectedFile2 ? 'compare' : 'single';
+
+            // Update header
+            const subtitle = document.getElementById('headerSubtitle');
+            if (mode === 'compare') {
+                const name1 = availableFiles.find(f => f.path === selectedFile1)?.name || '';
+                const name2 = availableFiles.find(f => f.path === selectedFile2)?.name || '';
+                subtitle.textContent = `Comparing: ${name1} vs ${name2}`;
+            } else {
+                const name = availableFiles.find(f => f.path === selectedFile1)?.name || '';
+                subtitle.textContent = `Viewing: ${name}`;
+            }
+
+            loadMaps();
+        }
+
         async function loadMaps() {
+            if (!selectedFile1) return;
+
             const mapGrid = document.getElementById('mapGrid');
             mapGrid.innerHTML = '<div class="loading">Loading maps...</div>';
 
             try {
-                if (mode === 'compare') {
+                if (mode === 'compare' && selectedFile2) {
                     const maps = await Promise.all(
                         currentMaps.map(idx =>
-                            fetch(`/api/compare/${idx}`).then(r => {
+                            fetch(`/api/compare/${idx}?file1=${encodeURIComponent(selectedFile1)}&file2=${encodeURIComponent(selectedFile2)}`).then(r => {
                                 if (!r.ok) throw new Error(`Failed to load map ${idx}`);
                                 return r.json();
                             })
@@ -256,7 +327,7 @@
                 } else {
                     const maps = await Promise.all(
                         currentMaps.map(idx =>
-                            fetch(`/api/map/${idx}`).then(r => {
+                            fetch(`/api/map/${idx}?file=${encodeURIComponent(selectedFile1)}`).then(r => {
                                 if (!r.ok) throw new Error(`Failed to load map ${idx}`);
                                 return r.json();
                             })
@@ -414,7 +485,7 @@
 
                 container.innerHTML = `
                     <div class="map-header">
-                        <div class="map-title">${map.name}</div>
+                        <div class="map-title">${map.name} - ${map.filename}</div>
                         <div class="map-info">
                             <span>Offset: 0x${map.offset.toString(16).toUpperCase()}</span>
                             <span>Size: ${map.rows}x${map.cols}</span>
@@ -606,7 +677,7 @@
                     </div>
                     <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
                         <div>
-                            <div style="font-weight: 600; color: #667eea; margin-bottom: 5px;">File 1</div>
+                            <div style="font-weight: 600; color: #667eea; margin-bottom: 5px;">${map.filename1}</div>
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
                                 <div class="stat">
                                     <div class="stat-label">Min</div>
@@ -619,7 +690,7 @@
                             </div>
                         </div>
                         <div>
-                            <div style="font-weight: 600; color: #667eea; margin-bottom: 5px;">File 2</div>
+                            <div style="font-weight: 600; color: #667eea; margin-bottom: 5px;">${map.filename2}</div>
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
                                 <div class="stat">
                                     <div class="stat-label">Min</div>
@@ -749,19 +820,16 @@
 
         // Load on startup
         window.addEventListener('load', async () => {
-            // Check mode
-            const modeResponse = await fetch('/api/mode');
-            const modeData = await modeResponse.json();
-            mode = modeData.mode;
+            // Load available files
+            await loadFileList();
 
-            // Update header if in compare mode
-            if (mode === 'compare') {
-                document.querySelector('header .subtitle').textContent =
-                    `Comparing: ${modeData.file1} vs ${modeData.file2}`;
-            }
-
+            // Initialize controls
             initColorRangeControls();
-            loadMaps();
+
+            // Load maps for the default file
+            if (selectedFile1) {
+                onFileSelectionChange();
+            }
         });
     </script>
 </body>

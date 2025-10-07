@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/pterm/pterm"
-	"github.com/tosih/ecu-reader/pkg/models"
+	"github.com/tosih/motronic-m21-tool/pkg/models"
 )
 
 // CreateBackup creates a timestamped backup of the file

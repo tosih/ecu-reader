@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/pterm/pterm"
-	"github.com/tosih/ecu-reader/pkg/models"
+	"github.com/tosih/motronic-m21-tool/pkg/models"
 )
 
 // CompareFiles compares maps between two ECU files

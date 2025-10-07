@@ -5,13 +5,13 @@ import (
 	"os"
 
 	"github.com/pterm/pterm"
-	"github.com/tosih/ecu-reader/pkg/compare"
-	"github.com/tosih/ecu-reader/pkg/editor"
-	"github.com/tosih/ecu-reader/pkg/export"
-	"github.com/tosih/ecu-reader/pkg/reader"
-	"github.com/tosih/ecu-reader/pkg/renderer"
-	"github.com/tosih/ecu-reader/pkg/scanner"
-	"github.com/tosih/ecu-reader/pkg/web"
+	"github.com/tosih/motronic-m21-tool/pkg/compare"
+	"github.com/tosih/motronic-m21-tool/pkg/editor"
+	"github.com/tosih/motronic-m21-tool/pkg/export"
+	"github.com/tosih/motronic-m21-tool/pkg/reader"
+	"github.com/tosih/motronic-m21-tool/pkg/renderer"
+	"github.com/tosih/motronic-m21-tool/pkg/scanner"
+	"github.com/tosih/motronic-m21-tool/pkg/web"
 )
 
 func main() {

@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/pterm/pterm"
-	"github.com/tosih/ecu-reader/pkg/models"
+	"github.com/tosih/motronic-m21-tool/pkg/models"
 )
 
 // RenderMap displays a map with optional verbose output and display mode

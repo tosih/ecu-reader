@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/tosih/ecu-reader/pkg/models"
+	"github.com/tosih/motronic-m21-tool/pkg/models"
 )
 
 // ReadMap reads a map from the binary file at the specified configuration

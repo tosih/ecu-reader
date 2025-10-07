@@ -227,6 +227,59 @@
             font-weight: 600;
         }
 
+        .config-section {
+            background: #1a1a1a;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .config-title {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+        }
+
+        .config-item {
+            background: #252525;
+            padding: 15px;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .config-label {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .config-name {
+            font-weight: 500;
+            color: #e0e0e0;
+        }
+
+        .config-desc {
+            font-size: 0.85em;
+            color: #888;
+        }
+
+        .config-value {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #667eea;
+            text-align: right;
+        }
+
         @media (min-width: 1200px) {
             .map-grid.grid-2 {
                 grid-template-columns: repeat(2, 1fr);
@@ -256,6 +309,11 @@
             <input type="checkbox" id="showValues" onchange="loadMaps()" checked>
             Show Values
         </label>
+    </div>
+
+    <div id="configSection" class="config-section">
+        <div class="config-title">📊 Configuration Parameters</div>
+        <div id="configGrid" class="config-grid"></div>
     </div>
 
     <div id="mapGrid" class="map-grid"></div>
@@ -335,7 +393,47 @@
                 subtitle.textContent = `Viewing: ${name}`;
             }
 
+            loadConfig();
             loadMaps();
+        }
+
+        async function loadConfig() {
+            if (!selectedFile1) return;
+
+            const configGrid = document.getElementById('configGrid');
+            configGrid.innerHTML = '<div class="loading">Loading configuration...</div>';
+
+            try {
+                const response = await fetch(`/api/config?file=${encodeURIComponent(selectedFile1)}`);
+                if (!response.ok) throw new Error('Failed to load config');
+
+                const data = await response.json();
+                renderConfig(data);
+            } catch (error) {
+                configGrid.innerHTML = `<div class="loading">Error loading config: ${error.message}</div>`;
+                console.error('Error loading config:', error);
+            }
+        }
+
+        function renderConfig(data) {
+            const configGrid = document.getElementById('configGrid');
+            configGrid.innerHTML = '';
+
+            data.params.forEach(param => {
+                const value = data.values[param.Name];
+                if (value === undefined) return;
+
+                const item = document.createElement('div');
+                item.className = 'config-item';
+                item.innerHTML = `
+                    <div class="config-label">
+                        <div class="config-name">${param.Name}</div>
+                        <div class="config-desc">${param.Description}</div>
+                    </div>
+                    <div class="config-value">${value.toFixed(0)} ${param.Unit}</div>
+                `;
+                configGrid.appendChild(item);
+            });
         }
 
         async function loadMaps() {

@@ -104,6 +104,7 @@ func findBinFiles(dir string) ([]string, error) {
 func (s *Server) Start() error {
 	http.HandleFunc("/", s.handleIndex)
 	http.HandleFunc("/api/files", s.handleFileList)
+	http.HandleFunc("/api/config", s.handleConfigData)
 	http.HandleFunc("/api/map/", s.handleMapData)
 	http.HandleFunc("/api/compare/", s.handleCompareData)
 	http.HandleFunc("/api/mode", s.handleMode)
@@ -159,6 +160,36 @@ func (s *Server) handleFileList(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(fileList)
+}
+
+func (s *Server) handleConfigData(w http.ResponseWriter, r *http.Request) {
+	// Get filename from query parameter
+	filename := r.URL.Query().Get("file")
+	if filename == "" {
+		if len(s.binFiles) > 0 {
+			filename = s.binFiles[0]
+		} else {
+			http.Error(w, "No bin files available", http.StatusBadRequest)
+			return
+		}
+	}
+
+	// Read config parameters
+	config, err := reader.ReadConfigParams(filename)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error reading config: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Build response with params and values
+	response := map[string]interface{}{
+		"params":   config.Params,
+		"values":   config.Values,
+		"filename": filepath.Base(filename),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 func (s *Server) handleMapData(w http.ResponseWriter, r *http.Request) {

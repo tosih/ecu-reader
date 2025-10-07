@@ -3,7 +3,12 @@
     "allow": [
       "Bash(go build:*)",
       "Bash(timeout:*)",
-      "Bash(./ecu-reader:*)"
+      "Bash(./ecu-reader:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(gh repo rename:*)",
+      "Bash(./motronic-m21-tool:*)"
     ],
     "deny": [],
     "ask": []

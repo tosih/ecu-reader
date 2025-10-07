@@ -33,3 +33,4 @@ go.work.sum
 **/*.bin
 **/*.BIN
 ecu-reader
+motronic-m21-tool

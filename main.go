@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/pterm/pterm"
 	"github.com/tosih/motronic-m21-tool/pkg/compare"
@@ -31,25 +33,60 @@ func main() {
 
 	flag.Parse()
 
-	if *filename == "" && !*list {
-		pterm.Error.Println("Please specify an ECU file with -file flag")
-		flag.Usage()
-		os.Exit(1)
-	}
-
 	// List available maps
 	if *list {
 		renderer.ListAvailableMaps()
 		return
 	}
 
+	// If no file specified, scan bins/ directory and list available files
+	if *filename == "" {
+		binFiles := findBinFiles("bins")
+		if len(binFiles) == 0 {
+			pterm.Error.Println("No .bin files found in bins/ directory")
+			pterm.Info.Println("Please specify a file with -file flag or place .bin files in the bins/ directory")
+			os.Exit(1)
+		}
+
+		// Show available bin files
+		pterm.DefaultHeader.WithFullWidth().Println("Available ECU Binary Files")
+		pterm.DefaultTable.WithHasHeader().WithData(pterm.TableData{
+			{"#", "Filename", "Size", "Path"},
+		}).Render()
+
+		tableData := pterm.TableData{{"#", "Filename", "Size", "Path"}}
+		for i, file := range binFiles {
+			info, _ := os.Stat(file)
+			size := formatFileSize(info.Size())
+			tableData = append(tableData, []string{
+				pterm.Sprintf("%d", i+1),
+				filepath.Base(file),
+				size,
+				file,
+			})
+		}
+		pterm.DefaultTable.WithHasHeader().WithData(tableData).Render()
+
+		pterm.Info.Printf("\nFound %d .bin file(s) in bins/ directory\n", len(binFiles))
+		pterm.Info.Println("Use -file <path> to analyze a specific file")
+		pterm.Info.Println("Use -web to launch web interface with all files")
+		return
+	}
+
 	// Web interface mode
 	if *webMode {
 		var server *web.Server
+		fileOrDir := *filename
+
+		// If no file specified, use bins/ directory
+		if fileOrDir == "" {
+			fileOrDir = "bins"
+		}
+
 		if *compareFile != "" {
-			server = web.NewCompareServer(*filename, *compareFile, *port)
+			server = web.NewCompareServer(fileOrDir, *compareFile, *port)
 		} else {
-			server = web.NewServer(*filename, *port)
+			server = web.NewServer(fileOrDir, *port)
 		}
 		if err := server.Start(); err != nil {
 			pterm.Error.Printf("Web server error: %v\n", err)
@@ -96,4 +133,36 @@ func main() {
 
 	// Normal display mode
 	renderer.DisplayMaps(*filename, *mapType, *verbose, *displayMode, reader.ReadMap)
+}
+
+// findBinFiles scans a directory for .bin files
+func findBinFiles(dir string) []string {
+	var binFiles []string
+
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return binFiles
+	}
+
+	for _, file := range files {
+		if !file.IsDir() && strings.HasSuffix(strings.ToLower(file.Name()), ".bin") {
+			binFiles = append(binFiles, filepath.Join(dir, file.Name()))
+		}
+	}
+
+	return binFiles
+}
+
+// formatFileSize formats a file size in bytes to a human-readable string
+func formatFileSize(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return pterm.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return pterm.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }

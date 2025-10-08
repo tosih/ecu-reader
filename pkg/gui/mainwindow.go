@@ -45,6 +45,7 @@ func NewMainWindow(app *gtk.Application) *MainWindow {
 	}
 
 	mw.buildUI()
+	mw.applyCSSStyles()
 	mw.setupActions()
 	mw.window.Show()
 

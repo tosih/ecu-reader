@@ -8,12 +8,36 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 )
 
+// isDarkMode checks if the current theme is dark
+func (mw *MainWindow) isDarkMode() bool {
+	settings := gtk.SettingsGetDefault()
+	return settings.ObjectProperty("gtk-application-prefer-dark-theme").(bool)
+}
+
+// getThemeColors returns text and background colors for the current theme
+func (mw *MainWindow) getThemeColors() (textR, textG, textB, bgR, bgG, bgB float64) {
+	isDark := mw.isDarkMode()
+	if isDark {
+		// Dark mode: light text on dark background
+		return 0.9, 0.9, 0.9, 0.2, 0.2, 0.2
+	}
+	// Light mode: dark text on light background
+	return 0.1, 0.1, 0.1, 0.95, 0.95, 0.95
+}
+
 // drawMapFunc is the drawing callback for the map visualization
 func (mw *MainWindow) drawMapFunc(area *gtk.DrawingArea, cr *cairo.Context, width, height int) {
 	if mw.currentMap == nil {
 		mw.drawEmptyState(cr, width, height)
 		return
 	}
+
+	// Get theme colors
+	textR, textG, textB, bgR, bgG, bgB := mw.getThemeColors()
+
+	// Fill background
+	cr.SetSourceRGB(bgR, bgG, bgB)
+	cr.Paint()
 
 	// Calculate cell dimensions
 	rows := mw.currentMap.Config.Rows
@@ -31,7 +55,7 @@ func (mw *MainWindow) drawMapFunc(area *gtk.DrawingArea, cr *cairo.Context, widt
 	cellHeight := availableHeight / float64(rows)
 
 	// Draw title
-	cr.SetSourceRGB(0, 0, 0)
+	cr.SetSourceRGB(textR, textG, textB)
 	cr.SelectFontFace("Sans", cairo.FontSlantNormal, cairo.FontWeightBold)
 	cr.SetFontSize(16)
 	cr.MoveTo(marginLeft, 30)
@@ -61,9 +85,13 @@ func (mw *MainWindow) drawMapFunc(area *gtk.DrawingArea, cr *cairo.Context, widt
 			cr.SetSourceRGB(r, g, b)
 			cr.Fill()
 
-			// Draw cell border
+			// Draw cell border (darker in light mode, lighter in dark mode)
 			cr.Rectangle(x, y, cellWidth, cellHeight)
-			cr.SetSourceRGB(0.3, 0.3, 0.3)
+			if mw.isDarkMode() {
+				cr.SetSourceRGB(0.5, 0.5, 0.5)
+			} else {
+				cr.SetSourceRGB(0.3, 0.3, 0.3)
+			}
 			cr.SetLineWidth(1)
 			cr.Stroke()
 
@@ -90,7 +118,7 @@ func (mw *MainWindow) drawMapFunc(area *gtk.DrawingArea, cr *cairo.Context, widt
 	}
 
 	// Draw RPM axis (horizontal)
-	cr.SetSourceRGB(0, 0, 0)
+	cr.SetSourceRGB(textR, textG, textB)
 	cr.SelectFontFace("Sans", cairo.FontSlantNormal, cairo.FontWeightBold)
 	cr.SetFontSize(11)
 
@@ -153,10 +181,13 @@ func (mw *MainWindow) drawMapFunc(area *gtk.DrawingArea, cr *cairo.Context, widt
 
 // drawEmptyState draws a message when no file is loaded
 func (mw *MainWindow) drawEmptyState(cr *cairo.Context, width, height int) {
-	cr.SetSourceRGB(0.9, 0.9, 0.9)
+	// Get theme colors
+	textR, textG, textB, bgR, bgG, bgB := mw.getThemeColors()
+
+	cr.SetSourceRGB(bgR, bgG, bgB)
 	cr.Paint()
 
-	cr.SetSourceRGB(0.5, 0.5, 0.5)
+	cr.SetSourceRGB(textR*0.7, textG*0.7, textB*0.7)
 	cr.SelectFontFace("Sans", cairo.FontSlantNormal, cairo.FontWeightNormal)
 	cr.SetFontSize(20)
 
@@ -225,6 +256,8 @@ func (mw *MainWindow) findMinMax(data [][]float64) (float64, float64) {
 
 // drawColorLegend draws a color legend on the right side
 func (mw *MainWindow) drawColorLegend(cr *cairo.Context, x, y, width, height, minVal, maxVal float64) {
+	textR, textG, textB, _, _, _ := mw.getThemeColors()
+
 	// Draw gradient bar
 	numSteps := 100
 	stepHeight := height / float64(numSteps)
@@ -240,12 +273,12 @@ func (mw *MainWindow) drawColorLegend(cr *cairo.Context, x, y, width, height, mi
 
 	// Draw border
 	cr.Rectangle(x, y, width, height)
-	cr.SetSourceRGB(0, 0, 0)
+	cr.SetSourceRGB(textR, textG, textB)
 	cr.SetLineWidth(1)
 	cr.Stroke()
 
 	// Draw scale labels
-	cr.SetSourceRGB(0, 0, 0)
+	cr.SetSourceRGB(textR, textG, textB)
 	cr.SelectFontFace("Sans", cairo.FontSlantNormal, cairo.FontWeightNormal)
 	cr.SetFontSize(10)
 

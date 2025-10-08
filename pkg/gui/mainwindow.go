@@ -32,6 +32,9 @@ type MainWindow struct {
 	configTreeView *gtk.TreeView
 	notebookTabs   *gtk.Notebook
 
+	// Config parameter tracking
+	configValueLabels map[string]*gtk.Label
+
 	// Comparison mode
 	compareFile string
 	compareMap  *models.ECUMap
@@ -40,8 +43,9 @@ type MainWindow struct {
 // NewMainWindow creates and displays the main application window
 func NewMainWindow(app *gtk.Application) *MainWindow {
 	mw := &MainWindow{
-		app:            app,
-		selectedMapIdx: 0,
+		app:               app,
+		selectedMapIdx:    0,
+		configValueLabels: make(map[string]*gtk.Label),
 	}
 
 	mw.buildUI()
@@ -312,6 +316,9 @@ func (mw *MainWindow) loadECUFile(filename string) {
 
 	// Load the currently selected map
 	mw.loadCurrentMap()
+
+	// Refresh config parameter values
+	mw.refreshConfigValues()
 
 	// Update status
 	mw.statusBar.SetText(fmt.Sprintf("Loaded: %s", filename))

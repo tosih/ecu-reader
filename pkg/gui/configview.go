@@ -41,13 +41,6 @@ func (mw *MainWindow) buildConfigView() *gtk.Box {
 
 	box.Append(scrolled)
 
-	// Refresh button
-	refreshButton := gtk.NewButtonWithLabel("Refresh Values")
-	refreshButton.ConnectClicked(func() {
-		mw.refreshConfigValues(listBox)
-	})
-	box.Append(refreshButton)
-
 	return box
 }
 
@@ -78,10 +71,13 @@ func (mw *MainWindow) createConfigParamRow(param models.ConfigParam) *gtk.Box {
 
 	// Middle - current value
 	valueLabel := gtk.NewLabel("--")
-	valueLabel.SetName(fmt.Sprintf("value_%s", param.Name))
 	valueLabel.AddCSSClass("param-value")
-	valueLabel.SetSizeRequest(100, -1)
+	valueLabel.SetSizeRequest(120, -1)
+	valueLabel.SetXAlign(1) // Right align the value
 	rowBox.Append(valueLabel)
+
+	// Store the label for later updates
+	mw.configValueLabels[param.Name] = valueLabel
 
 	// Right side - edit button
 	editButton := gtk.NewButtonWithLabel("Edit")
@@ -94,35 +90,27 @@ func (mw *MainWindow) createConfigParamRow(param models.ConfigParam) *gtk.Box {
 }
 
 // refreshConfigValues refreshes all config parameter values from the file
-func (mw *MainWindow) refreshConfigValues(listBox *gtk.ListBox) {
+func (mw *MainWindow) refreshConfigValues() {
 	if mw.currentFile == "" {
 		return
 	}
 
 	// Read all config values
-	for i, param := range models.ConfigParams {
+	for _, param := range models.ConfigParams {
 		value, err := reader.ReadConfigParam(mw.currentFile, param)
 		if err != nil {
+			// Show error in the label
+			if label, ok := mw.configValueLabels[param.Name]; ok {
+				label.SetText("Error")
+			}
 			continue
 		}
 
-		// Find the value label and update it
-		row := listBox.RowAtIndex(i)
-		if row != nil {
-			child := row.Child()
-			if box, ok := child.(*gtk.Box); ok {
-				// Find value label (second to last child)
-				valueLabel := mw.findChildByName(box, fmt.Sprintf("value_%s", param.Name))
-				if valueLabel != nil {
-					if label, ok := valueLabel.(*gtk.Label); ok {
-						label.SetText(fmt.Sprintf("%.1f %s", value, param.Unit))
-					}
-				}
-			}
+		// Update the value label
+		if label, ok := mw.configValueLabels[param.Name]; ok {
+			label.SetText(fmt.Sprintf("%.1f %s", value, param.Unit))
 		}
 	}
-
-	mw.statusBar.SetText("Config parameters refreshed")
 }
 
 // findChildByName recursively finds a widget by name (disabled for now)
@@ -270,8 +258,14 @@ func (mw *MainWindow) saveConfigParam(param models.ConfigParam, newValue float64
 		return
 	}
 
-	// Update UI
-	valueLabel.SetText(fmt.Sprintf("%.1f %s", newValue, param.Unit))
+	// Update UI - read the actual value back from file to confirm
+	actualValue, err := reader.ReadConfigParam(mw.currentFile, param)
+	if err == nil {
+		valueLabel.SetText(fmt.Sprintf("%.1f %s", actualValue, param.Unit))
+	} else {
+		valueLabel.SetText(fmt.Sprintf("%.1f %s", newValue, param.Unit))
+	}
+
 	mw.statusBar.SetText(fmt.Sprintf("%s updated to %.1f %s", param.Name, newValue, param.Unit))
 
 	mw.showInfoDialog("Parameter saved successfully! Backup created.")

@@ -1,12 +1,13 @@
 package gui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
+	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 	"github.com/tosih/motronic-m21-tool/pkg/models"
 	"github.com/tosih/motronic-m21-tool/pkg/reader"
@@ -153,7 +154,9 @@ func (mw *MainWindow) buildContentArea() {
 	// Add mouse click handler for cell editing
 	clickGesture := gtk.NewGestureClick()
 	clickGesture.SetButton(1) // Left click
-	clickGesture.ConnectPressed(mw.onMapClicked)
+	clickGesture.ConnectPressed(func(nPress int, x, y float64) {
+		mw.onMapClicked(clickGesture, nPress, x, y)
+	})
 	mw.mapDrawArea.AddController(clickGesture)
 
 	mapScrolled := gtk.NewScrolledWindow()
@@ -233,42 +236,42 @@ func (mw *MainWindow) createMenuButton() *gtk.MenuButton {
 func (mw *MainWindow) setupActions() {
 	// Open action
 	openAction := gio.NewSimpleAction("open", nil)
-	openAction.ConnectActivate(func(param *gio.Variant) {
+	openAction.ConnectActivate(func(param *glib.Variant) {
 		mw.openFileDialog()
 	})
 	mw.app.AddAction(openAction)
 
 	// Export action
 	exportAction := gio.NewSimpleAction("export", nil)
-	exportAction.ConnectActivate(func(param *gio.Variant) {
+	exportAction.ConnectActivate(func(param *glib.Variant) {
 		mw.exportDialog()
 	})
 	mw.app.AddAction(exportAction)
 
 	// Compare action
 	compareAction := gio.NewSimpleAction("compare", nil)
-	compareAction.ConnectActivate(func(param *gio.Variant) {
+	compareAction.ConnectActivate(func(param *glib.Variant) {
 		mw.openCompareDialog()
 	})
 	mw.app.AddAction(compareAction)
 
 	// Scanner action
 	scannerAction := gio.NewSimpleAction("scanner", nil)
-	scannerAction.ConnectActivate(func(param *gio.Variant) {
+	scannerAction.ConnectActivate(func(param *glib.Variant) {
 		mw.notebookTabs.SetCurrentPage(2) // Switch to scanner tab
 	})
 	mw.app.AddAction(scannerAction)
 
 	// About action
 	aboutAction := gio.NewSimpleAction("about", nil)
-	aboutAction.ConnectActivate(func(param *gio.Variant) {
+	aboutAction.ConnectActivate(func(param *glib.Variant) {
 		mw.showAboutDialog()
 	})
 	mw.app.AddAction(aboutAction)
 
 	// Quit action
 	quitAction := gio.NewSimpleAction("quit", nil)
-	quitAction.ConnectActivate(func(param *gio.Variant) {
+	quitAction.ConnectActivate(func(param *glib.Variant) {
 		mw.window.Close()
 	})
 	mw.app.AddAction(quitAction)
@@ -276,46 +279,28 @@ func (mw *MainWindow) setupActions() {
 
 // openFileDialog shows file chooser for opening ECU files
 func (mw *MainWindow) openFileDialog() {
-	dialog := gtk.NewFileChooserDialog(
-		"Open ECU Binary File",
-		&mw.window.Window,
-		gtk.FileChooserActionOpen,
-	)
-
-	dialog.AddButton("Cancel", int(gtk.ResponseCancel))
-	dialog.AddButton("Open", int(gtk.ResponseAccept))
-	dialog.SetModal(true)
-
-	// Add file filter for .bin files
-	filter := gtk.NewFileFilter()
-	filter.SetName("ECU Binary Files (*.bin)")
-	filter.AddPattern("*.bin")
-	filter.AddPattern("*.BIN")
-	dialog.AddFilter(filter)
-
-	allFilter := gtk.NewFileFilter()
-	allFilter.SetName("All Files")
-	allFilter.AddPattern("*")
-	dialog.AddFilter(allFilter)
+	dialog := gtk.NewFileDialog()
+	dialog.SetTitle("Open ECU Binary File")
 
 	// Set default folder if it exists
 	if _, err := os.Stat("bins"); err == nil {
-		binFile := gio.NewFileForPath("bins")
-		dialog.SetCurrentFolder(binFile)
+		binFolder := gio.NewFileForPath("bins")
+		dialog.SetInitialFolder(binFolder)
 	}
 
-	dialog.ConnectResponse(func(responseID int) {
-		if responseID == int(gtk.ResponseAccept) {
-			file := dialog.File()
-			if file != nil {
-				path := file.Path()
-				mw.loadECUFile(path)
-			}
+	// Open file dialog
+	ctx := context.Background()
+	dialog.Open(ctx, &mw.window.Window, func(res gio.AsyncResulter) {
+		file, err := dialog.OpenFinish(res)
+		if err != nil {
+			return // User cancelled
 		}
-		dialog.Destroy()
-	})
 
-	dialog.Show()
+		if file != nil {
+			path := file.Path()
+			mw.loadECUFile(path)
+		}
+	})
 }
 
 // loadECUFile loads an ECU binary file
@@ -388,9 +373,8 @@ func (mw *MainWindow) showErrorDialog(message string) {
 		gtk.DialogModal,
 		gtk.MessageError,
 		gtk.ButtonsOK,
-		"%s",
-		message,
 	)
+	dialog.SetMarkup(fmt.Sprintf("<b>Error</b>\n\n%s", message))
 	dialog.ConnectResponse(func(response int) {
 		dialog.Destroy()
 	})

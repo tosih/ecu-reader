@@ -1,8 +1,10 @@
 package gui
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 	"github.com/tosih/motronic-m21-tool/pkg/editor"
 )
@@ -79,8 +81,7 @@ func (mw *MainWindow) showCellEditDialog(row, col int) {
 
 	// Buttons
 	dialog.AddButton("Cancel", int(gtk.ResponseCancel))
-	saveButton := dialog.AddButton("Save", int(gtk.ResponseAccept))
-	saveButton.AddCSSClass("suggested-action")
+	dialog.AddButton("Save", int(gtk.ResponseAccept))
 
 	dialog.ConnectResponse(func(responseID int) {
 		if responseID == int(gtk.ResponseAccept) {
@@ -109,15 +110,12 @@ func (mw *MainWindow) confirmAndSaveEdit(row, col int, newValue float64, editDia
 		gtk.DialogModal,
 		gtk.MessageWarning,
 		gtk.ButtonsNone,
-		"Confirm ECU Modification",
 	)
 
-	confirmDialog.SetProperty("secondary-text",
-		fmt.Sprintf("This will modify the ECU binary file.\nA backup will be created automatically.\n\nProceed with caution!"))
+	confirmDialog.SetMarkup("<b>Confirm ECU Modification</b>\n\nThis will modify the ECU binary file.\nA backup will be created automatically.\n\nProceed with caution!")
 
 	confirmDialog.AddButton("Cancel", int(gtk.ResponseCancel))
-	confirmButton := confirmDialog.AddButton("Save Changes", int(gtk.ResponseAccept))
-	confirmButton.AddCSSClass("destructive-action")
+	confirmDialog.AddButton("Save Changes", int(gtk.ResponseAccept))
 
 	confirmDialog.ConnectResponse(func(responseID int) {
 		if responseID == int(gtk.ResponseAccept) {
@@ -133,13 +131,14 @@ func (mw *MainWindow) confirmAndSaveEdit(row, col int, newValue float64, editDia
 // saveCellEdit saves a cell edit to the ECU file
 func (mw *MainWindow) saveCellEdit(row, col int, newValue float64) {
 	// Create backup first
-	if err := editor.CreateBackup(mw.currentFile); err != nil {
+	_, err := editor.CreateBackup(mw.currentFile)
+	if err != nil {
 		mw.showErrorDialog(fmt.Sprintf("Failed to create backup: %v", err))
 		return
 	}
 
 	// Update the cell
-	err := editor.EditMapCellDirect(mw.currentFile, mw.currentMap.Config, row, col, newValue)
+	err = editor.EditMapCellDirect(mw.currentFile, mw.currentMap.Config, row, col, newValue)
 	if err != nil {
 		mw.showErrorDialog(fmt.Sprintf("Failed to save edit: %v", err))
 		return
@@ -165,9 +164,8 @@ func (mw *MainWindow) showInfoDialog(message string) {
 		gtk.DialogModal,
 		gtk.MessageInfo,
 		gtk.ButtonsOK,
-		"%s",
-		message,
 	)
+	dialog.SetMarkup(message)
 	dialog.ConnectResponse(func(response int) {
 		dialog.Destroy()
 	})
@@ -181,37 +179,24 @@ func (mw *MainWindow) openCompareDialog() {
 		return
 	}
 
-	dialog := gtk.NewFileChooserDialog(
-		"Select ECU File to Compare",
-		&mw.window.Window,
-		gtk.FileChooserActionOpen,
-	)
+	dialog := gtk.NewFileDialog()
+	dialog.SetTitle("Select ECU File to Compare")
 
-	dialog.AddButton("Cancel", int(gtk.ResponseCancel))
-	dialog.AddButton("Compare", int(gtk.ResponseAccept))
-	dialog.SetModal(true)
-
-	// Add file filter
-	filter := gtk.NewFileFilter()
-	filter.SetName("ECU Binary Files (*.bin)")
-	filter.AddPattern("*.bin")
-	filter.AddPattern("*.BIN")
-	dialog.AddFilter(filter)
-
-	dialog.ConnectResponse(func(responseID int) {
-		if responseID == int(gtk.ResponseAccept) {
-			file := dialog.File()
-			if file != nil {
-				path := file.Path()
-				mw.compareFile = path
-				mw.loadCurrentMap() // Reload to load comparison map
-				mw.statusBar.SetText(fmt.Sprintf("Comparing with: %s", path))
-			}
+	// Open file dialog
+	ctx := context.Background()
+	dialog.Open(ctx, &mw.window.Window, func(res gio.AsyncResulter) {
+		file, err := dialog.OpenFinish(res)
+		if err != nil {
+			return // User cancelled
 		}
-		dialog.Destroy()
-	})
 
-	dialog.Show()
+		if file != nil {
+			path := file.Path()
+			mw.compareFile = path
+			mw.loadCurrentMap() // Reload to load comparison map
+			mw.statusBar.SetText(fmt.Sprintf("Comparing with: %s", path))
+		}
+	})
 }
 
 // exportDialog shows a dialog for exporting maps to CSV
@@ -221,28 +206,22 @@ func (mw *MainWindow) exportDialog() {
 		return
 	}
 
-	dialog := gtk.NewFileChooserDialog(
-		"Select Export Directory",
-		&mw.window.Window,
-		gtk.FileChooserActionSelectFolder,
-	)
+	dialog := gtk.NewFileDialog()
+	dialog.SetTitle("Select Export Directory")
 
-	dialog.AddButton("Cancel", int(gtk.ResponseCancel))
-	dialog.AddButton("Export", int(gtk.ResponseAccept))
-	dialog.SetModal(true)
-
-	dialog.ConnectResponse(func(responseID int) {
-		if responseID == int(gtk.ResponseAccept) {
-			file := dialog.File()
-			if file != nil {
-				exportPath := file.Path()
-				mw.performExport(exportPath)
-			}
+	// Select folder dialog
+	ctx := context.Background()
+	dialog.SelectFolder(ctx, &mw.window.Window, func(res gio.AsyncResulter) {
+		file, err := dialog.SelectFolderFinish(res)
+		if err != nil {
+			return // User cancelled
 		}
-		dialog.Destroy()
-	})
 
-	dialog.Show()
+		if file != nil {
+			exportPath := file.Path()
+			mw.performExport(exportPath)
+		}
+	})
 }
 
 // performExport exports the current map to CSV

@@ -125,23 +125,11 @@ func (mw *MainWindow) refreshConfigValues(listBox *gtk.ListBox) {
 	mw.statusBar.SetText("Config parameters refreshed")
 }
 
-// findChildByName recursively finds a widget by name
+// findChildByName recursively finds a widget by name (disabled for now)
 func (mw *MainWindow) findChildByName(widget gtk.Widgetter, name string) gtk.Widgetter {
-	if widget.Name() == name {
-		return widget
-	}
-
-	// Try to iterate children if it's a container
-	if box, ok := widget.(*gtk.Box); ok {
-		child := box.FirstChild()
-		for child != nil {
-			if result := mw.findChildByName(child, name); result != nil {
-				return result
-			}
-			child = child.NextSibling()
-		}
-	}
-
+	// Note: This function needs to be reimplemented using a different approach
+	// as NextSibling() is not available in this version of gotk4
+	// For now, we'll manually track value labels in the refresh function
 	return nil
 }
 
@@ -212,8 +200,7 @@ func (mw *MainWindow) editConfigParam(param models.ConfigParam, valueLabel *gtk.
 
 	// Buttons
 	dialog.AddButton("Cancel", int(gtk.ResponseCancel))
-	saveButton := dialog.AddButton("Save", int(gtk.ResponseAccept))
-	saveButton.AddCSSClass("suggested-action")
+	dialog.AddButton("Save", int(gtk.ResponseAccept))
 
 	dialog.ConnectResponse(func(responseID int) {
 		if responseID == int(gtk.ResponseAccept) {
@@ -248,16 +235,13 @@ func (mw *MainWindow) confirmAndSaveConfigParam(param models.ConfigParam, newVal
 		gtk.DialogModal,
 		gtk.MessageWarning,
 		gtk.ButtonsNone,
-		"Confirm ECU Modification",
 	)
 
-	confirmDialog.SetProperty("secondary-text",
-		fmt.Sprintf("This will modify the ECU binary file.\nA backup will be created automatically.\n\nParameter: %s\nNew Value: %.1f %s\n\nProceed with caution!",
-			param.Name, newValue, param.Unit))
+	confirmDialog.SetMarkup(fmt.Sprintf("<b>Confirm ECU Modification</b>\n\nThis will modify the ECU binary file.\nA backup will be created automatically.\n\nParameter: %s\nNew Value: %.1f %s\n\nProceed with caution!",
+		param.Name, newValue, param.Unit))
 
 	confirmDialog.AddButton("Cancel", int(gtk.ResponseCancel))
-	confirmButton := confirmDialog.AddButton("Save Changes", int(gtk.ResponseAccept))
-	confirmButton.AddCSSClass("destructive-action")
+	confirmDialog.AddButton("Save Changes", int(gtk.ResponseAccept))
 
 	confirmDialog.ConnectResponse(func(responseID int) {
 		if responseID == int(gtk.ResponseAccept) {
@@ -273,13 +257,14 @@ func (mw *MainWindow) confirmAndSaveConfigParam(param models.ConfigParam, newVal
 // saveConfigParam saves a config parameter to the ECU file
 func (mw *MainWindow) saveConfigParam(param models.ConfigParam, newValue float64, valueLabel *gtk.Label) {
 	// Create backup
-	if err := editor.CreateBackup(mw.currentFile); err != nil {
+	_, err := editor.CreateBackup(mw.currentFile)
+	if err != nil {
 		mw.showErrorDialog(fmt.Sprintf("Failed to create backup: %v", err))
 		return
 	}
 
 	// Write new value
-	err := editor.WriteConfigParam(mw.currentFile, param, newValue)
+	err = editor.WriteConfigParam(mw.currentFile, param, newValue)
 	if err != nil {
 		mw.showErrorDialog(fmt.Sprintf("Failed to save parameter: %v", err))
 		return

@@ -82,7 +82,6 @@ func (mw *MainWindow) buildUI() {
 
 	// Main content box (horizontal split)
 	mw.mainBox = gtk.NewBox(gtk.OrientationHorizontal, 0)
-	mw.window.SetChild(mw.mainBox)
 
 	// Left sidebar for map selection
 	mw.buildSidebar()

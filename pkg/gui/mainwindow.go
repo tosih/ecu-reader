@@ -31,9 +31,13 @@ type MainWindow struct {
 	statusBar      *gtk.Label
 	configTreeView *gtk.TreeView
 	notebookTabs   *gtk.Notebook
+	fileDropdown   *gtk.DropDown
 
 	// Config parameter tracking
 	configValueLabels map[string]*gtk.Label
+
+	// Available ECU files
+	availableFiles []string
 
 	// Comparison mode
 	compareFile string
@@ -51,6 +55,7 @@ func NewMainWindow(app *gtk.Application) *MainWindow {
 	mw.buildUI()
 	mw.applyCSSStyles()
 	mw.setupActions()
+	mw.loadAvailableFiles()
 	mw.window.Show()
 
 	return mw
@@ -71,19 +76,23 @@ func (mw *MainWindow) buildUI() {
 	menuButton := mw.createMenuButton()
 	mw.headerBar.PackStart(menuButton)
 
-	// Add open file button
-	openButton := gtk.NewButtonWithLabel("Open ECU File")
-	openButton.ConnectClicked(func() {
-		mw.openFileDialog()
+	// Create file dropdown (will be populated later)
+	mw.fileDropdown = gtk.NewDropDown(nil, nil)
+	mw.fileDropdown.SetSizeRequest(300, -1)
+
+	// Connect to notify::selected signal using base object
+	mw.fileDropdown.NotifyProperty("selected", func() {
+		mw.onFileSelected()
 	})
-	mw.headerBar.PackStart(openButton)
+
+	mw.headerBar.SetTitleWidget(mw.fileDropdown)
 
 	// Add compare button
 	compareButton := gtk.NewButtonWithLabel("Compare Files")
 	compareButton.ConnectClicked(func() {
 		mw.openCompareDialog()
 	})
-	mw.headerBar.PackStart(compareButton)
+	mw.headerBar.PackEnd(compareButton)
 
 	// Main content box (horizontal split)
 	mw.mainBox = gtk.NewBox(gtk.OrientationHorizontal, 0)
@@ -399,4 +408,72 @@ func (mw *MainWindow) showAboutDialog() {
 	about.SetAuthors([]string{"Motronic M2.1 Tool Contributors"})
 	about.SetLicense("MIT License")
 	about.Show()
+}
+
+// loadAvailableFiles scans the bins directory for .bin files
+func (mw *MainWindow) loadAvailableFiles() {
+	mw.availableFiles = []string{}
+
+	// Check if bins directory exists
+	binsDir := "bins"
+	entries, err := os.ReadDir(binsDir)
+	if err != nil {
+		// No bins directory, show empty dropdown
+		mw.updateFileDropdown()
+		return
+	}
+
+	// Collect all .bin files
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if filepath.Ext(name) == ".bin" || filepath.Ext(name) == ".BIN" {
+			fullPath := filepath.Join(binsDir, name)
+			mw.availableFiles = append(mw.availableFiles, fullPath)
+		}
+	}
+
+	// Update the dropdown with the files
+	mw.updateFileDropdown()
+
+	// Auto-load the first file if available
+	if len(mw.availableFiles) > 0 {
+		mw.fileDropdown.SetSelected(0)
+	}
+}
+
+// updateFileDropdown updates the dropdown with available files
+func (mw *MainWindow) updateFileDropdown() {
+	if len(mw.availableFiles) == 0 {
+		// Create a model with just a placeholder
+		model := gtk.NewStringList([]string{"No ECU files found in bins/"})
+		mw.fileDropdown.SetModel(model)
+		mw.fileDropdown.SetSensitive(false)
+		return
+	}
+
+	// Create list of display names (just the filename)
+	displayNames := make([]string, len(mw.availableFiles))
+	for i, path := range mw.availableFiles {
+		displayNames[i] = filepath.Base(path)
+	}
+
+	model := gtk.NewStringList(displayNames)
+	mw.fileDropdown.SetModel(model)
+	mw.fileDropdown.SetSensitive(true)
+}
+
+// onFileSelected handles file selection from dropdown
+func (mw *MainWindow) onFileSelected() {
+	selected := mw.fileDropdown.Selected()
+	if selected == gtk.InvalidListPosition || int(selected) >= len(mw.availableFiles) {
+		return
+	}
+
+	filename := mw.availableFiles[selected]
+	if filename != mw.currentFile {
+		mw.loadECUFile(filename)
+	}
 }

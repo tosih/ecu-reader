@@ -120,7 +120,7 @@ func EditRevLimiter(filename string, dryRun bool) {
 	pterm.Success.Println("Rev limiter updated successfully!")
 }
 
-// EditMapCell allows editing a specific cell in a map
+// EditMapCell allows editing a specific cell in a map (CLI version)
 func EditMapCell(filename string, cfg models.MapConfig) {
 	pterm.Info.Printf("Editing %s (%dx%d)\n", cfg.Name, cfg.Rows, cfg.Cols)
 
@@ -280,4 +280,87 @@ func applyFuelEnrichPreset(filename string, dryRun bool) {
 
 	os.WriteFile(filename, data, 0644)
 	pterm.Success.Println("Fuel enrichment applied!")
+}
+
+// WriteConfigParam writes a configuration parameter value to the ECU file
+func WriteConfigParam(filename string, param models.ConfigParam, value float64) error {
+	// Convert real value to raw
+	var rawValue interface{}
+	switch param.DataType {
+	case "uint8":
+		rawValue = uint8((value - param.Offset2) / param.Scale)
+	case "uint16":
+		rawValue = uint16((value - param.Offset2) / param.Scale)
+	case "int8":
+		rawValue = int8((value - param.Offset2) / param.Scale)
+	case "int16":
+		rawValue = int16((value - param.Offset2) / param.Scale)
+	default:
+		return fmt.Errorf("unsupported data type: %s", param.DataType)
+	}
+
+	// Read file
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+
+	// Check bounds
+	if int(param.Offset) >= len(data) {
+		return fmt.Errorf("offset 0x%X out of bounds", param.Offset)
+	}
+
+	// Write value
+	switch v := rawValue.(type) {
+	case uint8:
+		data[param.Offset] = v
+	case uint16:
+		binary.LittleEndian.PutUint16(data[param.Offset:], v)
+	case int8:
+		data[param.Offset] = byte(v)
+	case int16:
+		binary.LittleEndian.PutUint16(data[param.Offset:], uint16(v))
+	}
+
+	// Write back to file
+	return os.WriteFile(filename, data, 0644)
+}
+
+// EditMapCellDirect edits a specific map cell without prompts (for GUI use)
+func EditMapCellDirect(filename string, cfg models.MapConfig, row, col int, newValue float64) error {
+	if row < 0 || row >= cfg.Rows || col < 0 || col >= cfg.Cols {
+		return fmt.Errorf("invalid cell coordinates: [%d,%d]", row, col)
+	}
+
+	// Read file
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+
+	// Calculate offset
+	cellOffset := cfg.Offset + int64(row*cfg.Cols+col)
+	if int(cellOffset) >= len(data) {
+		return fmt.Errorf("cell offset out of bounds")
+	}
+
+	// Convert value to raw
+	var newRaw uint8
+	if cfg.DataType == "uint8" {
+		newRaw = uint8((newValue - cfg.Offset2) / cfg.Scale)
+		data[cellOffset] = newRaw
+	} else if cfg.DataType == "uint16" {
+		newRaw16 := uint16((newValue - cfg.Offset2) / cfg.Scale)
+		binary.LittleEndian.PutUint16(data[cellOffset:], newRaw16)
+	}
+
+	// Write back
+	return os.WriteFile(filename, data, 0644)
+}
+
+// ExportMapToCSV exports a map to a CSV file
+func ExportMapToCSV(ecuMap *models.ECUMap, exportPath, mapName string) error {
+	// This is a placeholder - implement CSV export logic
+	// You can import the export package and call its functions
+	return fmt.Errorf("CSV export not yet implemented in GUI")
 }

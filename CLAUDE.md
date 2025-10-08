@@ -8,9 +8,9 @@ This is a Go CLI tool for reading, analyzing, and editing Motronic M2.1 ECU bina
 
 ## Development Commands
 
-### Build and Run
+### Build and Run (CLI)
 ```bash
-# Build the application
+# Build the CLI application
 go build -o motronic-m21-tool main.go
 
 # Run directly with Go
@@ -49,19 +49,52 @@ go run main.go -file bins/file.bin -preset revlimit
 go run main.go -file bins/file.bin -preset fuel-enrich
 ```
 
+### Build and Run (GTK GUI)
+```bash
+# Install GTK4 dependencies first (Ubuntu/Debian):
+sudo apt install libgtk-4-dev gobject-introspection libgirepository1.0-dev
+
+# Build the GTK application (first build will be very slow - 10-15 minutes)
+go build -o motronic-gtk main-gtk.go
+
+# Run the GUI
+./motronic-gtk
+```
+
+See [GTK_BUILD.md](GTK_BUILD.md) for detailed GTK build instructions and troubleshooting.
+
 ### Dependencies
 ```bash
 # Install/update dependencies
 go mod download
 go mod tidy
 
-# Main dependency: github.com/pterm/pterm for terminal UI
+# Main dependencies:
+# - github.com/pterm/pterm for CLI terminal UI
+# - github.com/diamondburned/gotk4 for GTK4 GUI
 ```
 
 ## Architecture
 
-### Single-File Design
-The entire application is contained in `main.go` (~1063 lines). This is intentional for simplicity - there are no packages or modules to navigate.
+### Package Structure
+The application has been refactored from a single-file design into well-organized packages:
+
+- `main.go` - CLI entry point with flag parsing
+- `main-gtk.go` - GTK GUI entry point
+- `pkg/models/` - Data structures (MapConfig, ECUMap, ConfigParam)
+- `pkg/reader/` - Reading ECU files and maps
+- `pkg/editor/` - Editing, backup, and writing operations
+- `pkg/renderer/` - CLI visualization and display
+- `pkg/scanner/` - Binary scanning for unknown maps
+- `pkg/compare/` - File comparison functionality
+- `pkg/export/` - CSV export functionality
+- `pkg/web/` - Web interface (alternative UI)
+- `pkg/gui/` - GTK4 graphical interface (NEW)
+  - `mainwindow.go` - Main window structure
+  - `mapdrawing.go` - Cairo-based map visualization
+  - `editing.go` - Interactive editing dialogs
+  - `configview.go` - Configuration parameters view
+  - `scannerview.go` - Binary scanner view
 
 ### Core Data Structures
 

@@ -71,3 +71,57 @@ func FindMinMax(data [][]float64) (float64, float64) {
 
 	return min, max
 }
+
+// ReadConfigParam reads a configuration parameter value from the ECU file
+func ReadConfigParam(filename string, param models.ConfigParam) (float64, error) {
+	f, err := os.Open(filename)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+
+	_, err = f.Seek(param.Offset, io.SeekStart)
+	if err != nil {
+		return 0, err
+	}
+
+	var value float64
+	switch param.DataType {
+	case "uint8":
+		var rawValue uint8
+		err = binary.Read(f, binary.LittleEndian, &rawValue)
+		if err != nil {
+			return 0, err
+		}
+		value = float64(rawValue)*param.Scale + param.Offset2
+
+	case "uint16":
+		var rawValue uint16
+		err = binary.Read(f, binary.LittleEndian, &rawValue)
+		if err != nil {
+			return 0, err
+		}
+		value = float64(rawValue)*param.Scale + param.Offset2
+
+	case "int8":
+		var rawValue int8
+		err = binary.Read(f, binary.LittleEndian, &rawValue)
+		if err != nil {
+			return 0, err
+		}
+		value = float64(rawValue)*param.Scale + param.Offset2
+
+	case "int16":
+		var rawValue int16
+		err = binary.Read(f, binary.LittleEndian, &rawValue)
+		if err != nil {
+			return 0, err
+		}
+		value = float64(rawValue)*param.Scale + param.Offset2
+
+	default:
+		return 0, nil
+	}
+
+	return value, nil
+}

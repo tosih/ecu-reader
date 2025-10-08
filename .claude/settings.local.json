@@ -14,7 +14,12 @@
       "Bash(python3:*)",
       "Bash(curl -s http://localhost:8081/api/config?file=bins/964618124-03_1267357006.BIN)",
       "Bash(curl -X POST \"http://localhost:8081/api/config/update\" -H \"Content-Type: application/json\" -d '{\"\"\"\"file\"\"\"\":\"\"\"\"/tmp/test-ecu.bin\"\"\"\",\"\"\"\"param\"\"\"\":\"\"\"\"Rev Limiter\"\"\"\",\"\"\"\"value\"\"\"\":7200}')",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(go get:*)",
+      "Bash(chmod:*)"
     ],
     "deny": [],
     "ask": []

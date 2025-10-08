@@ -18,6 +18,8 @@ type ScanResult struct {
 	Endianness string
 	Min        float64
 	Max        float64
+	Mean       float64
+	StdDev     float64
 	Variance   float64
 	Preview    string
 }
@@ -218,4 +220,89 @@ func displayResults(results []ScanResult) {
 
 	pterm.DefaultTable.WithHasHeader().WithData(tableData).Render()
 	pterm.Info.Printf("\nFound %d potential map(s)\n", len(results))
+}
+
+// ScanFile scans a binary file and returns scan results (for GUI use)
+func ScanFile(filename string, minVariance float64) []ScanResult {
+	f, err := os.Open(filename)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil
+	}
+
+	var results []ScanResult
+
+	// Scan for 8x8, 8x16, and 16x16 patterns
+	sizes := []struct{ rows, cols int }{
+		{8, 8},
+		{8, 16},
+		{16, 16},
+	}
+
+	for _, size := range sizes {
+		cellCount := size.rows * size.cols
+
+		// Scan for uint8 values
+		for offset := 0; offset < len(data)-cellCount; offset += 0x40 {
+			if result := scanUint8WithStats(data, offset, size.rows, size.cols, minVariance); result != nil {
+				results = append(results, *result)
+			}
+		}
+	}
+
+	return results
+}
+
+// scanUint8WithStats is like scanUint8 but includes mean and stddev
+func scanUint8WithStats(data []byte, offset int, rows int, cols int, minVariance float64) *ScanResult {
+	cellCount := rows * cols
+	if offset+cellCount > len(data) {
+		return nil
+	}
+
+	values := make([]float64, cellCount)
+	for i := 0; i < cellCount; i++ {
+		values[i] = float64(data[offset+i])
+	}
+
+	min, max, variance := calculateStats(values)
+
+	// Check if variance is good enough
+	if (max-min) < minVariance || max == 0 {
+		return nil
+	}
+
+	// Calculate mean and std dev
+	sum := 0.0
+	for _, v := range values {
+		sum += v
+	}
+	mean := sum / float64(len(values))
+
+	stddev := 0.0
+	for _, v := range values {
+		diff := v - mean
+		stddev += diff * diff
+	}
+	stddev = stddev / float64(len(values))
+	stddev = float64(int(stddev*10)) / 10 // Round to 1 decimal
+
+	return &ScanResult{
+		Offset:     offset,
+		Rows:       rows,
+		Cols:       cols,
+		DataType:   "uint8",
+		Endianness: "N/A",
+		Min:        min,
+		Max:        max,
+		Mean:       mean,
+		StdDev:     stddev,
+		Variance:   variance,
+		Preview:    "",
+	}
 }
